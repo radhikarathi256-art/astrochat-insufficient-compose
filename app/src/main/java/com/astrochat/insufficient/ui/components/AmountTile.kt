@@ -28,8 +28,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -53,7 +58,9 @@ fun AmountTile(
     bonus: Int,
     selected: Boolean,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onBadgePlaced: (Rect) -> Unit = {},
+    badgeHidden: Boolean = false
 ) {
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
@@ -64,8 +71,10 @@ fun AmountTile(
             Modifier
                 .fillMaxWidth()
                 // 89 x 67 expressed as a ratio so the row can stretch on wider phones without
-                // the tiles going off-spec relative to each other.
-                .aspectRatio(1f / 0.81f)
+                // the tiles going off-spec relative to each other. It is 89/67 and not a
+                // rounded 1/0.81 — at 0.81 the tile is 7% too tall, which on a 411dp screen is
+                // enough to push the badge past the 96dp row and get it clipped.
+                .aspectRatio(89f / 67f)
                 .scale(press)
                 .shadow(
                     elevation = if (selected) 6.dp else 4.dp,
@@ -112,8 +121,14 @@ fun AmountTile(
             BonusBadge(
                 bonus = bonus,
                 modifier = Modifier
-                    .padding(top = 0.dp)
-                    .graphicsLayer { translationY = -Tokens.Dimens.badgeOverlap.toPx() }
+                    .graphicsLayer {
+                        translationY = -Tokens.Dimens.badgeOverlap.toPx()
+                        // The badge is the thing in flight, so while the flyer is up the
+                        // original has to be gone — two of them on screen at once is the
+                        // giveaway that the flyer is a copy.
+                        alpha = if (badgeHidden) 0f else 1f
+                    }
+                    .onGloballyPositioned { onBadgePlaced(it.boundsInRoot()) }
             )
         }
     }
@@ -195,11 +210,15 @@ private const val WEDGE_HEIGHT_FRACTION = 0.5f
  * badge. The card's whole vertical rhythm below is measured off this badge's height.
  */
 @Composable
-fun BonusBadge(bonus: Int, modifier: Modifier = Modifier) {
+fun BonusBadge(bonus: Int, modifier: Modifier = Modifier, elevated: Boolean = false) {
     Row(
         modifier
+            .then(
+                if (elevated) Modifier.shadow(10.dp, RoundedCornerShape(Tokens.Dimens.badgeRadius))
+                else Modifier
+            )
             .clip(RoundedCornerShape(Tokens.Dimens.badgeRadius))
-            // White first, then the 75% green on top of it — the badge's gradient is translucent
+            // White first, then the 85% green on top of it — the badge's gradient is translucent
             // and is specified against a white base, not against whatever it happens to overlap.
             .background(Tokens.Palette.white)
             .background(Tokens.BandBrush.badgeGreen)
@@ -209,5 +228,43 @@ fun BonusBadge(bonus: Int, modifier: Modifier = Modifier) {
         Text("+₹", fontSize = 10.sp, lineHeight = 14.sp, fontWeight = FontWeight.SemiBold, color = Tokens.Palette.white)
         Text("$bonus", fontSize = 12.sp, lineHeight = 14.sp, fontWeight = FontWeight.ExtraBold, color = Tokens.Palette.white)
         Text(" more", fontSize = 10.sp, lineHeight = 14.sp, fontWeight = FontWeight.SemiBold, color = Tokens.Palette.white)
+    }
+}
+
+/**
+ * The badge in flight — the screen's signature move.
+ *
+ * Picking an amount lifts its "+₹150 more" pill off the tile, arcs it down and drops it into the
+ * congratulations card, and the card starts counting the bonus on at the moment it lands. This
+ * is what connects the two halves of the screen: without it the card's figure just changes and
+ * nothing tells the user that the number came from the tile they tapped.
+ *
+ * It is rendered by the screen at ROOT level, not inside the card, because it has to travel
+ * across both — anything parented lower gets clipped by the receipt card on the way down.
+ *
+ * [progress] runs 0..1 over the flight. The path is a straight line in x and an eased fall in y
+ * with a lift subtracted, so it leaves the tile upward before it drops — a straight interpolation
+ * between the two points reads as the pill being dragged rather than thrown.
+ */
+@Composable
+fun BonusFlyer(bonus: Int, from: Rect, to: Offset, progress: Float, modifier: Modifier = Modifier) {
+    val p = progress.coerceIn(0f, 1f)
+    val fall = 1f - (1f - p) * (1f - p) * (1f - p)   // easeOutCubic
+    val lift = 34.dp
+
+    Box(
+        modifier.graphicsLayer {
+            val lifted = lift.toPx() * kotlin.math.sin(p * Math.PI).toFloat()
+            translationX = from.left + (to.x - from.width / 2f - from.left) * p
+            translationY = from.top + (to.y - from.height / 2f - from.top) * fall - lifted
+            // Shrinks as it falls, so it reads as going INTO the card rather than onto it.
+            val s = 1f - 0.3f * p
+            scaleX = s; scaleY = s
+            transformOrigin = TransformOrigin(0f, 0f)
+            // Holds full opacity almost the whole way; it should look absorbed, not evaporated.
+            alpha = if (p < 0.82f) 1f else (1f - p) / 0.18f
+        }
+    ) {
+        BonusBadge(bonus = bonus, elevated = true)
     }
 }

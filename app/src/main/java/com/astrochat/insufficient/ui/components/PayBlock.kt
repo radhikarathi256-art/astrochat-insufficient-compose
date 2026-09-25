@@ -38,7 +38,11 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -60,11 +64,30 @@ import com.astrochat.insufficient.ui.theme.Tokens
  * Only the TOP corners are rounded — the card's bottom edge is covered by the white arc below.
  */
 @Composable
-fun CongratsCard(credit: Int, gold: Boolean, modifier: Modifier = Modifier) {
+fun CongratsCard(
+    credit: Int,
+    gold: Boolean,
+    modifier: Modifier = Modifier,
+    tilt: Float = 0f,
+    absorb: Float = 0f,
+    onFigurePlaced: (Offset) -> Unit = {}
+) {
     Box(
         modifier
-            .width(268.dp)
+            // 268 of the design's 360, kept as a FRACTION. As a fixed 268dp it is correct on a
+            // 360dp handset and visibly narrow on anything wider — a Pixel 6 Pro is 411dp, and
+            // the card lost 14% of the screen it is supposed to span.
+            .fillMaxWidth(268f / 360f)
             .height(108.dp)
+            // Picking an amount tips the card in Z and settles it back. The perspective has to
+            // be set here: without it a rotationX is an orthographic squash, not a tilt.
+            .graphicsLayer {
+                cameraDistance = 12f * density
+                rotationX = 9f * tilt
+                rotationY = -6f * tilt
+                val s = 1f + 0.03f * tilt
+                scaleX = s; scaleY = s
+            }
             .shadow(6.dp, RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp))
             .clip(RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp))
             // The 1.5dp rim, on a 150deg axis. Green is White 95% · Success/700 45% · White 85%.
@@ -106,7 +129,13 @@ fun CongratsCard(credit: Int, gold: Boolean, modifier: Modifier = Modifier) {
                 }
                 val ink = if (gold) GoldCardInk else CardInk
                 Row(
-                    Modifier.padding(top = 8.dp),
+                    Modifier
+                        .padding(top = 8.dp)
+                        // The figure takes the hit as the flying chip lands on it. Driven from
+                        // the screen so the bump is on the same frame as the landing, not on a
+                        // timer that can drift out of step with it.
+                        .graphicsLayer { scaleX = 1f + absorb; scaleY = 1f + absorb }
+                        .onGloballyPositioned { onFigurePlaced(it.boundsInRoot().center) },
                     verticalAlignment = Alignment.Top,
                     horizontalArrangement = Arrangement.spacedBy(3.dp)
                 ) {
@@ -116,6 +145,9 @@ fun CongratsCard(credit: Int, gold: Boolean, modifier: Modifier = Modifier) {
                         fontSize = 31.sp, lineHeight = 31.sp,
                         fontWeight = FontWeight.ExtraBold,
                         letterSpacing = (-1).sp,
+                        // Tabular figures, or the whole card shifts left and right on every
+                        // frame of the count-up as the glyph widths change under it.
+                        style = TextStyle(fontFeatureSettings = "tnum"),
                         color = ink
                     )
                 }
@@ -291,7 +323,10 @@ fun PayBar(total: Int, method: String, onPay: () -> Unit, modifier: Modifier = M
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        // 112 : 200 is the design's own split at 360dp (360 - 2x16 gutter - 16 gap). As weights
+        // it holds that ratio on any width; as a fixed 200dp button it shrinks against the
+        // screen on every phone wider than the mock.
+        Column(Modifier.weight(112f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("Pay with", style = Tokens.Type.bodyXs, color = Tokens.Palette.gray600)
                 ChevronGlyph(Tokens.Palette.gray600, Modifier.size(16.dp))
@@ -313,7 +348,7 @@ fun PayBar(total: Int, method: String, onPay: () -> Unit, modifier: Modifier = M
         }
         Row(
             Modifier
-                .width(200.dp)
+                .weight(200f)
                 .scale(if (pressed) 0.98f else 1f)
                 .clip(RoundedCornerShape(12.dp))
                 .background(Tokens.Palette.brand)
