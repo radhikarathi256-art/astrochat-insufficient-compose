@@ -6,6 +6,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -24,10 +25,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.astrochat.insufficient.R
 import com.astrochat.insufficient.ui.theme.Tokens
 
 /**
@@ -105,25 +107,19 @@ fun OfferPopup(
     }
 }
 
-/** 52dp disc carrying the same tag glyph the band uses, so the popup and the band read as one offer. */
+/**
+ * The 52dp seal that caps the popup — `popup-badge.svg`, shipped as-is.
+ *
+ * It is one SHAPE, not a disc with something drawn inside it. This used to be a gradient circle
+ * with a redrawn price tag on top, which reads as a generic badge; the asset is the scalloped
+ * rosette, the same silhouette the band's seal uses, which is what ties the popup and the band
+ * together as one offer.
+ */
 @Composable
 private fun PopupBadge() {
-    Box(
-        Modifier
-            .size(Tokens.Dimens.popupBadge)
-            .shadow(8.dp, RoundedCornerShape(percent = 50))
-            .clip(RoundedCornerShape(percent = 50))
-            .background(
-                Brush.verticalGradient(
-                    listOf(Tokens.Palette.success500, Tokens.Palette.success700)
-                )
-            ),
-        contentAlignment = Alignment.Center
-    ) {
-        TagGlyph(
-            tint = Tokens.Palette.white,
-            holeColor = Tokens.Palette.success600,
-            modifier = Modifier.size(28.dp)
-        )
-    }
+    Image(
+        painter = painterResource(R.drawable.ic_popup_badge),
+        contentDescription = null,
+        modifier = Modifier.size(Tokens.Dimens.popupBadge)
+    )
 }

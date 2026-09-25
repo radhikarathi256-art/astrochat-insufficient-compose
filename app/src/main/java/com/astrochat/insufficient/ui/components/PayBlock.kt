@@ -6,6 +6,7 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -37,9 +38,11 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.astrochat.insufficient.R
 import com.astrochat.insufficient.ui.theme.Tokens
 
 /**
@@ -49,23 +52,31 @@ import com.astrochat.insufficient.ui.theme.Tokens
  * on top at 8.5% opacity. That last layer is what makes it read as foil rather than as a green
  * gradient; drop it and the card goes flat, which is the usual reason this gets rebuilt wrong.
  *
+ * TWO foils, and which one shows is not decorative. When the amount earns nothing at all — no
+ * bonus and no coupon, which on this table is ₹50 alone — the card turns GOLD and drops the
+ * "CONGRATULATIONS!" eyebrow, because there is nothing to congratulate. Keeping it green would
+ * have the card celebrating a plain top-up.
+ *
  * Only the TOP corners are rounded — the card's bottom edge is covered by the white arc below.
  */
 @Composable
-fun CongratsCard(credit: Int, modifier: Modifier = Modifier) {
+fun CongratsCard(credit: Int, gold: Boolean, modifier: Modifier = Modifier) {
     Box(
         modifier
             .width(268.dp)
             .height(108.dp)
             .shadow(6.dp, RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp))
             .clip(RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp))
-            // The 1.5dp rim: White 95% · Success/700 45% · White 85% on a 150deg axis.
+            // The 1.5dp rim, on a 150deg axis. Green is White 95% · Success/700 45% · White 85%.
+            // Gold has NO token: the Warning ramp is a saturated amber and no opacity of it
+            // reaches an antique gold, so that middle stop is a literal.
             .background(
                 Brush.linearGradient(
                     listOf(
                         Tokens.Palette.white.copy(alpha = 0.95f),
-                        Tokens.Palette.success700.copy(alpha = 0.45f),
-                        Tokens.Palette.white.copy(alpha = 0.85f)
+                        if (gold) Color(0xFF966E19).copy(alpha = 0.42f)
+                        else Tokens.Palette.success700.copy(alpha = 0.45f),
+                        Tokens.Palette.white.copy(alpha = if (gold) 0.88f else 0.85f)
                     )
                 )
             )
@@ -79,30 +90,33 @@ fun CongratsCard(credit: Int, modifier: Modifier = Modifier) {
                 .clip(RoundedCornerShape(topStart = 16.5.dp, topEnd = 16.5.dp)),
             contentAlignment = Alignment.Center
         ) {
-            FoilSkin()
+            FoilSkin(gold)
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 modifier = Modifier.padding(horizontal = 18.dp)
             ) {
-                Text(
-                    "CONGRATULATIONS!",
-                    fontSize = 11.5.sp,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 0.7.sp,
-                    color = Tokens.Palette.success800
-                )
+                if (!gold) {
+                    Text(
+                        "CONGRATULATIONS!",
+                        fontSize = 11.5.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 0.7.sp,
+                        color = Tokens.Palette.success800
+                    )
+                }
+                val ink = if (gold) GoldCardInk else CardInk
                 Row(
                     Modifier.padding(top = 8.dp),
                     verticalAlignment = Alignment.Top,
                     horizontalArrangement = Arrangement.spacedBy(3.dp)
                 ) {
-                    Text("₹", fontSize = 17.sp, lineHeight = 17.sp, fontWeight = FontWeight.Bold, color = CardInk)
+                    Text("₹", fontSize = 17.sp, lineHeight = 17.sp, fontWeight = FontWeight.Bold, color = ink)
                     Text(
                         "$credit",
                         fontSize = 31.sp, lineHeight = 31.sp,
                         fontWeight = FontWeight.ExtraBold,
                         letterSpacing = (-1).sp,
-                        color = CardInk
+                        color = ink
                     )
                 }
                 Text(
@@ -118,6 +132,7 @@ fun CongratsCard(credit: Int, modifier: Modifier = Modifier) {
 }
 
 private val CardInk = Color(0xFF04301F)
+private val GoldCardInk = Color(0xFF3F3417)
 
 /**
  * The foil itself. Three layers, bottom to top: the sweep, a slowly rotating ray comb, and a
@@ -128,7 +143,7 @@ private val CardInk = Color(0xFF04301F)
  * through `((100 + a) mod 360) / 360`. Re-derive with that formula if a stop ever moves.
  */
 @Composable
-private fun FoilSkin() {
+private fun FoilSkin(gold: Boolean) {
     val spin = rememberInfiniteTransition(label = "foil")
     val angle by spin.animateFloat(
         initialValue = 0f, targetValue = 360f,
@@ -136,25 +151,25 @@ private fun FoilSkin() {
         label = "foilAngle"
     )
 
+    // Same eleven stop POSITIONS for both foils — only the hues differ, so the two cards catch
+    // the light identically and swapping one for the other reads as a change of metal.
+    val sweep = if (gold) listOf(
+        0.0000f to Color(0xFFEAD9AE), 0.0778f to Color(0xFFF4EBD3), 0.1778f to Color(0xFFE6D3A2),
+        0.2778f to Color(0xFFF3E8CC), 0.3611f to Color(0xFFDEC88F), 0.4444f to Color(0xFFFBF4E4),
+        0.5444f to Color(0xFFE2CE99), 0.6444f to Color(0xFFF7EEDA), 0.7444f to Color(0xFFD8C085),
+        0.8444f to Color(0xFFFBF4E4), 0.9556f to Color(0xFFE0CB94), 1.0000f to Color(0xFFEAD9AE)
+    ) else listOf(
+        0.0000f to Color(0xFFA0DCC2), 0.0778f to Color(0xFFD2F0E2), 0.1778f to Color(0xFF8FD7B7),
+        0.2778f to Color(0xFFCDEEDE), 0.3611f to Color(0xFF86D3B2), 0.4444f to Color(0xFFE6F8EF),
+        0.5444f to Color(0xFF8AD4B4), 0.6444f to Color(0xFFD9F3E8), 0.7444f to Color(0xFF7FCDAC),
+        0.8444f to Color(0xFFE6F8EF), 0.9556f to Color(0xFF84D1B0), 1.0000f to Color(0xFFA0DCC2)
+    )
+    val ray = if (gold) Color(0xFF60460A) else Color(0xFF00462C)
+    val highlight = if (gold) 0.68f else 0.62f
+
     Canvas(Modifier.fillMaxWidth().height(105.dp)) {
         val centre = Offset(size.width * 0.5f, size.height * 0.56f)
-        drawRect(
-            Brush.sweepGradient(
-                0.0000f to Color(0xFFA0DCC2),
-                0.0778f to Color(0xFFD2F0E2),
-                0.1778f to Color(0xFF8FD7B7),
-                0.2778f to Color(0xFFCDEEDE),
-                0.3611f to Color(0xFF86D3B2),
-                0.4444f to Color(0xFFE6F8EF),
-                0.5444f to Color(0xFF8AD4B4),
-                0.6444f to Color(0xFFD9F3E8),
-                0.7444f to Color(0xFF7FCDAC),
-                0.8444f to Color(0xFFE6F8EF),
-                0.9556f to Color(0xFF84D1B0),
-                1.0000f to Color(0xFFA0DCC2),
-                center = centre
-            )
-        )
+        drawRect(Brush.sweepGradient(*sweep.toTypedArray(), center = centre))
 
         // The ray comb. 180 hairlines struck from the same centre, turning once every 22s.
         rotate(degrees = angle, pivot = centre) {
@@ -162,7 +177,7 @@ private fun FoilSkin() {
             repeat(180) { i ->
                 val a = Math.toRadians(i * 2.0)
                 drawLine(
-                    color = Color(0xFF00462C).copy(alpha = 0.085f),
+                    color = ray.copy(alpha = 0.085f),
                     start = centre,
                     end = Offset(
                         centre.x + (reach * kotlin.math.cos(a)).toFloat(),
@@ -176,7 +191,7 @@ private fun FoilSkin() {
         drawRect(
             Brush.radialGradient(
                 colors = listOf(
-                    Tokens.Palette.white.copy(alpha = 0.62f),
+                    Tokens.Palette.white.copy(alpha = highlight),
                     Tokens.Palette.white.copy(alpha = 0f)
                 ),
                 center = centre,
@@ -190,9 +205,13 @@ private fun FoilSkin() {
  * The white arc that the congratulations card sits into. It is the card's bottom edge: the card
  * is pulled 22dp down into it so the two overlap, which is why the card has no bottom radius.
  * The bright line along the arc is a left-to-right white/mint/white gradient.
+ *
+ * That line is MINT, so it goes with the green card and is dropped entirely under the gold one
+ * rather than being recoloured — a gold card with a green seam under it is the tell that the
+ * two were built separately.
  */
 @Composable
-fun CardArc(modifier: Modifier = Modifier) {
+fun CardArc(gold: Boolean, modifier: Modifier = Modifier) {
     Canvas(modifier.fillMaxWidth().height(24.dp)) {
         val w = size.width
         val h = size.height
@@ -208,15 +227,17 @@ fun CardArc(modifier: Modifier = Modifier) {
             close()
         }
         drawPath(filled, Tokens.Palette.white)
-        drawPath(
-            curve,
-            Brush.horizontalGradient(
-                0f to Tokens.Palette.white,
-                0.48f to Color(0xFF78F8BE),
-                1f to Tokens.Palette.white
-            ),
-            style = Stroke(width = 3.dp.toPx(), cap = StrokeCap.Butt)
-        )
+        if (!gold) {
+            drawPath(
+                curve,
+                Brush.horizontalGradient(
+                    0f to Tokens.Palette.white,
+                    0.48f to Color(0xFF78F8BE),
+                    1f to Tokens.Palette.white
+                ),
+                style = Stroke(width = 3.dp.toPx(), cap = StrokeCap.Butt)
+            )
+        }
     }
 }
 
@@ -275,7 +296,20 @@ fun PayBar(total: Int, method: String, onPay: () -> Unit, modifier: Modifier = M
                 Text("Pay with", style = Tokens.Type.bodyXs, color = Tokens.Palette.gray600)
                 ChevronGlyph(Tokens.Palette.gray600, Modifier.size(16.dp))
             }
-            Text(method, style = Tokens.Type.bodySm, fontWeight = FontWeight.SemiBold, color = Tokens.Palette.gray800)
+            // The method is its MARK plus its name, never the name alone. At a glance down here
+            // the logo is what the user actually recognises, and a bare "UPI" is not even the
+            // same claim — UPI is the rail, PhonePe is the app the money leaves from.
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Image(
+                    painter = painterResource(R.drawable.ic_phonepe),
+                    contentDescription = null,
+                    modifier = Modifier.size(20.dp)
+                )
+                Text(method, style = Tokens.Type.bodySm, fontWeight = FontWeight.SemiBold, color = Tokens.Palette.gray800)
+            }
         }
         Row(
             Modifier

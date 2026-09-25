@@ -41,6 +41,7 @@ import com.astrochat.insufficient.data.Pricing
 import com.astrochat.insufficient.data.bandCopyFor
 import com.astrochat.insufficient.ui.components.AlertBand
 import com.astrochat.insufficient.ui.components.AmountTile
+import com.astrochat.insufficient.ui.components.BackGlyph
 import com.astrochat.insufficient.ui.components.CardArc
 import com.astrochat.insufficient.ui.components.CongratsCard
 import com.astrochat.insufficient.ui.components.OfferPopup
@@ -91,6 +92,10 @@ fun InsufficientScreen() {
     val copy = bandCopyFor(selected, ASTROLOGER, secondsLeft)
     val credit = Pricing.creditFor(selected, couponApplied = band == BandType.COUPON)
     val gst = Pricing.gstFor(selected)
+    // Gold whenever the amount earns nothing. The COUPON counts towards this even though it is
+    // itemised separately from the bonus, so a ₹50 under ASTRO50 stays green — it is credit the
+    // user gained, which is the only thing the card is about.
+    val goldCard = credit == selected
 
     Box(
         Modifier
@@ -175,10 +180,11 @@ fun InsufficientScreen() {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         CongratsCard(
                             credit = credit,
+                            gold = goldCard,
                             // Pulled into the arc below so the arc IS its bottom edge.
                             modifier = Modifier.graphicsLayer { translationY = 22.dp.toPx() }
                         )
-                        CardArc(Modifier.graphicsLayer { translationY = 22.dp.toPx() })
+                        CardArc(goldCard, Modifier.graphicsLayer { translationY = 22.dp.toPx() })
                     }
                 }
                 Spacer(Modifier.height(22.dp))
@@ -195,7 +201,7 @@ fun InsufficientScreen() {
                     coupon = if (band == BandType.COUPON) Pricing.COUPON_FLAT else 0,
                     gst = gst
                 )
-                PayBar(total = selected + gst, method = "UPI", onPay = {})
+                PayBar(total = selected + gst, method = "PhonePe", onPay = {})
             }
         }
 
@@ -222,18 +228,30 @@ private fun TopNav() {
             .height(48.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(
-            "Add Money",
-            style = Tokens.Type.bodyLg,
-            fontWeight = FontWeight.SemiBold,
-            color = Tokens.Palette.gray700,
-            modifier = Modifier.weight(1f)
-        )
+        // Back arrow and title are ONE control — the whole "← Add Money" group is the back
+        // target, which is why they sit in a row at a 2dp gap rather than the title being
+        // centred with a separate icon button.
+        Row(
+            Modifier.weight(1f),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
+            Box(Modifier.size(24.dp), contentAlignment = Alignment.Center) {
+                BackGlyph(Tokens.Palette.gray700, Modifier.size(18.dp))
+            }
+            Text(
+                "Add Money",
+                style = Tokens.Type.bodyLg,
+                fontWeight = FontWeight.SemiBold,
+                color = Tokens.Palette.gray700
+            )
+        }
         Row(
             Modifier
+                .height(28.dp)
                 .clip(RoundedCornerShape(20.dp))
                 .background(Tokens.Palette.gray100)
-                .padding(horizontal = 8.dp, vertical = 4.dp),
+                .padding(horizontal = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {

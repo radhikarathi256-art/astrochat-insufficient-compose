@@ -5,10 +5,12 @@ import androidx.compose.animation.core.Easing
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.astrochat.insufficient.R
 
 /**
  * Design tokens for the Add Money / insufficient-balance surface.
@@ -49,6 +51,7 @@ object Tokens {
         val success700 = Color(0xFF027A48)
         val success800 = Color(0xFF05603A)
         val success900 = Color(0xFF054F31)
+        val success950 = Color(0xFF04452F)
 
         val warning50 = Color(0xFFFFFAEB)
         val warning100 = Color(0xFFFEF0C7)
@@ -70,11 +73,24 @@ object Tokens {
 
     /**
      * Type scale. Figma names are in the trailing comment so a spec review can be done by eye.
-     * Inter everywhere, letter-spacing 0. FontFamily.Default is a deliberate placeholder —
-     * drop Inter into res/font and swap this one line to match production exactly.
+     * Inter everywhere, letter-spacing 0.
+     *
+     * This is REAL Inter (res/font), not FontFamily.Default. It used to be the default, and that
+     * one line was the single biggest reason the screen read as "not the design": Roboto's wider
+     * apertures and taller x-height throw every measured width on this screen — the tile figures,
+     * the badge, the band's two lines. Do not swap it back to a system family to save 2MB.
      */
     object Type {
-        private val inter = FontFamily.Default
+        private val inter = FontFamily(
+            Font(R.font.inter_regular, FontWeight.Normal),
+            Font(R.font.inter_medium, FontWeight.Medium),
+            Font(R.font.inter_semibold, FontWeight.SemiBold),
+            Font(R.font.inter_bold, FontWeight.Bold),
+            Font(R.font.inter_extrabold, FontWeight.ExtraBold)
+        )
+
+        /** Exposed so call sites that set a raw fontSize still get Inter rather than Roboto. */
+        val family = inter
 
         val bodyXs = TextStyle(fontFamily = inter, fontSize = 12.sp, lineHeight = 18.sp)   // Body X Small 12
         val bodySm = TextStyle(fontFamily = inter, fontSize = 14.sp, lineHeight = 20.sp)   // Body Medium 14
@@ -165,13 +181,21 @@ object Tokens {
     object BandBrush {
         private fun h(vararg stops: Pair<Float, Color>) = Brush.horizontalGradient(*stops)
 
-        /** Type=Bonus — the standing green bonus band. */
+        /**
+         * Type=Bonus — the standing green bonus band.
+         *
+         * Alpha stops over Success/600, not opaque mixes, exactly as Figma 5075:5757 and the
+         * prototype specify. Every band in this set is drawn on white, so the two are the same
+         * pixels today; keeping the alpha means the band still behaves if it is ever placed on
+         * a tinted surface, and it is what the design actually says.
+         */
         val bonus = h(
-            0f to Color(0xFFE9FCF2), 0.40f to Color(0xFFF0FDF6),
-            0.78f to Color(0xFFF8FEFB), 1f to Color(0xFFFFFFFF)
+            0f to Color(0xFF039855).copy(alpha = 0.18f),
+            0.55f to Color(0xFF039855).copy(alpha = 0.03f),
+            1f to Color(0xFF039855).copy(alpha = 0f)
         )
 
-        /** Type=Bonus dark — same band while a countdown is running. */
+        /** Type=Bonus dark — the same band while a countdown is running. Opaque in the design. */
         val bonusDark = h(
             0f to Color(0xFFCDF8E0), 0.40f to Color(0xFFDEFBEB),
             0.78f to Color(0xFFF2FDF8), 1f to Color(0xFFFFFFFF)
@@ -183,29 +207,52 @@ object Tokens {
             0.78f to Color(0xFFFEF8F8), 1f to Color(0xFFFFFFFF)
         )
 
-        /** Type=Offer — dark green, holds white text and a live timer chip. */
+        /**
+         * Type=Offer — dark green, holds white text and a live timer chip.
+         *
+         * It is a walk DOWN the success ramp (950 -> 800 -> 700 -> 600), not a fade to white.
+         * That matters: this is the only band whose right edge stays saturated, which is why
+         * the copy must not run past ~80% of the width — on the pale bands an overrun just gets
+         * faint, here it lands on full-strength green and the white text keeps working, so the
+         * mistake is invisible until someone reads it at 12px.
+         */
         val offer = h(
-            0f to Color(0xFF065F41), 0.80f to Color(0xFF065F41), 0.86f to Color(0xFF0A6C4A),
-            0.90f to Color(0xFF3FA87A), 0.94f to Color(0xFF7CC3A5), 0.97f to Color(0xFFAFE0CA),
-            0.99f to Color(0xFFE3F3EC), 1f to Color(0xFFFFFFFF)
+            0f to Color(0xFF04452F), 0.42f to Color(0xFF05603A),
+            0.78f to Color(0xFF027A48), 1f to Color(0xFF039855)
         )
 
-        /** Type=Coupon — the ASTRO 50 band the offer becomes once the timer runs out. */
+        /**
+         * Type=Coupon — the ASTRO 50 band the offer becomes once the timer runs out.
+         * Same four ramp colours as Offer; only the stop positions move, so it reads as the
+         * same band having brightened rather than as a different component.
+         */
         val coupon = h(
-            0f to Color(0xFF039855), 0.88f to Color(0xFF04A25C), 0.94f to Color(0xFF3CB783),
-            0.98f to Color(0xFFBCE8D5), 1f to Color(0xFFFFFFFF)
+            0f to Color(0xFF04452F), 0.25f to Color(0xFF05603A),
+            0.663f to Color(0xFF027A48), 1f to Color(0xFF039855)
         )
 
         /** Type=Missing out — amber, shown when a better tier is one tap away. */
         val missingOut = h(
-            0f to Color(0xFFFEF5DE), 0.40f to Color(0xFFFEF8E9),
+            0f to Color(0xFFFEF5DE).copy(alpha = 0.6f),
+            0.40f to Color(0xFFFEF8E9).copy(alpha = 0.7f),
             0.78f to Color(0xFFFFFCF6), 1f to Color(0xFFFFFFFF)
         )
 
-        /** Bonus badge on the amount tile — Figma "Bonus badge / Style=Green". */
+        /**
+         * Bonus badge on the amount tile — Figma "Bonus badge / Style=Green".
+         *
+         * 85% opacity, not solid, and the last stop fades further. The badge hangs over the
+         * tile's white AND its own shadow; at full strength it stops being a badge ON the tile
+         * and reads as a separate green bar under it, and at Figma's own 75% the green went
+         * milky. 85% is Radhika's call and is what the prototype ships. The tail stop tracks
+         * it: Success/600 at 38.5% of the layer, i.e. .385 x .85 = .32725.
+         */
         val badgeGreen = h(
-            0f to Color(0xFF027A48), 0.10f to Color(0xFF027A48), 0.23f to Color(0xFF039855),
-            0.84f to Color(0xFF039855), 1f to Color(0xFF039855)
+            0f to Color(0xFF027A48).copy(alpha = 0.85f),
+            0.10f to Color(0xFF027A48).copy(alpha = 0.85f),
+            0.233f to Color(0xFF039855).copy(alpha = 0.85f),
+            0.839f to Color(0xFF039855).copy(alpha = 0.85f),
+            1f to Color(0xFF039855).copy(alpha = 0.32725f)
         )
     }
 

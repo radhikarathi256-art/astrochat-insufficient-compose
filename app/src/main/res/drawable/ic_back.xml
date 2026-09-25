@@ -1,0 +1,10 @@
+<!-- src/icons/back.svg, converted 1:1. Do not redraw by hand — the prototype ships this file. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="18dp"
+    android:height="18dp"
+    android:viewportWidth="18"
+    android:viewportHeight="18">
+    <path
+        android:fillColor="#344054"
+        android:pathData="M5.53,7.93L9.20,4.26C9.49,3.97 9.50,3.50 9.20,3.20L9.21,3.21C8.92,2.92 8.44,2.92 8.15,3.21L3.21,8.15C2.92,8.44 2.92,8.92 3.21,9.21L8.15,14.15C8.44,14.44 8.91,14.45 9.21,14.15L9.20,14.16C9.49,13.87 9.49,13.39 9.20,13.10L5.53,9.43H13.93C14.35,9.43 14.68,9.10 14.68,8.68C14.68,8.27 14.35,7.93 13.93,7.93H5.53Z" />
+</vector>

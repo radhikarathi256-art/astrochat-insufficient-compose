@@ -5,6 +5,7 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -24,9 +25,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
+import com.astrochat.insufficient.R
 import com.astrochat.insufficient.data.BandCopy
 import com.astrochat.insufficient.data.BandType
 import com.astrochat.insufficient.ui.theme.Tokens
@@ -58,12 +64,13 @@ fun AlertBand(
         BandType.MISSING_OUT -> Tokens.BandBrush.missingOut
     }
 
-    // Line colours are per-variant in Figma, not a single "on-surface" token.
-    val (line1Colour, line2Colour) = when (type) {
-        BandType.NOT_ENOUGH -> Tokens.Palette.error800 to Tokens.Palette.error800
-        BandType.OFFER, BandType.COUPON -> Tokens.Palette.white to Tokens.Palette.white
-        BandType.MISSING_OUT -> Tokens.Palette.warning800 to Tokens.Palette.warning700
-        BandType.BONUS, BandType.BONUS_DARK -> Tokens.Palette.success800 to Tokens.Palette.success700
+    // Line colours are per-variant in Figma, not a single "on-surface" token. Both lines of a
+    // band share one ink — measured off the prototype, which sets .l1 and .l2 to the same value.
+    val ink = when (type) {
+        BandType.NOT_ENOUGH -> Tokens.Palette.error800
+        BandType.OFFER, BandType.COUPON -> Tokens.Palette.white
+        BandType.MISSING_OUT -> Tokens.Palette.warning800
+        BandType.BONUS, BandType.BONUS_DARK -> Tokens.Palette.success800
     }
 
     Box(
@@ -71,6 +78,10 @@ fun AlertBand(
             .fillMaxWidth()
             .height(Tokens.Dimens.bandHeight)
             .clip(RoundedCornerShape(topStart = Tokens.Dimens.cardRadius, topEnd = Tokens.Dimens.cardRadius))
+            // White first. The Bonus and Missing out fills are translucent washes of one hue —
+            // that is how the design specifies them — so without a base they would composite
+            // against the app's grey chrome and come out muddy instead of tinting white.
+            .background(Tokens.Palette.white)
             .background(brush)
     ) {
         Row(
@@ -85,10 +96,10 @@ fun AlertBand(
             Column {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     androidx.compose.material3.Text(
-                        text = copy.line1,
+                        text = emphasise(copy.line1),
                         style = Tokens.Type.bodyXs,
                         fontWeight = FontWeight.Medium,
-                        color = line1Colour
+                        color = ink
                     )
                     if (copy.chip != null) {
                         Spacer(Modifier.width(5.dp))
@@ -97,10 +108,10 @@ fun AlertBand(
                 }
                 Spacer(Modifier.height(1.dp))
                 androidx.compose.material3.Text(
-                    text = copy.line2,
+                    text = emphasise(copy.line2),
                     style = Tokens.Type.bodyXs,
                     fontWeight = FontWeight.Medium,
-                    color = line2Colour
+                    color = ink
                 )
             }
         }
@@ -132,9 +143,33 @@ private fun CountdownChip(text: String) {
 }
 
 /**
- * The band's leading glyph, drawn as a real vector rather than shipped as a PNG so it takes the
- * band's colour and scales cleanly. It wiggles slowly — 3.4s on the calm bands, faster on the
- * promo ones, matching the prototype's `tagWiggle`.
+ * Turns the copy table's `*…*` runs into bold spans.
+ *
+ * The band's whole job is to put a number in front of someone in one glance, and the number is
+ * what is bold. Setting both lines at one weight — which is what this screen did before — loses
+ * that, and the band stops being scannable even though every word is right.
+ */
+private fun emphasise(marked: String): AnnotatedString = buildAnnotatedString {
+    marked.split('*').forEachIndexed { i, part ->
+        if (i % 2 == 1) {
+            withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(part) }
+        } else {
+            append(part)
+        }
+    }
+}
+
+/**
+ * The band's leading glyph. These are the prototype's own SVGs converted into res/drawable, NOT
+ * redrawn: each already carries its white disc and its own ink, so there is no tint here.
+ *
+ * Which glyph is a copy decision, not a colour one. The two alert bands take the BELL, because
+ * they are interrupting; every other band takes the discount seal, because it is offering
+ * something. The Not enough band used to draw a wallet, and a wallet reads as "top up" — the
+ * neutral message — exactly where the screen needs to say the chat cannot start.
+ *
+ * It wiggles slowly — 3.4s on the calm bands, faster on the promo ones, matching the prototype's
+ * `tagWiggle`.
  */
 @Composable
 private fun BandIcon(type: BandType, animate: Boolean) {
@@ -150,22 +185,20 @@ private fun BandIcon(type: BandType, animate: Boolean) {
         label = "tagAngle"
     )
 
-    val tint = when (type) {
-        BandType.NOT_ENOUGH -> Tokens.Palette.error700
-        BandType.OFFER, BandType.COUPON -> Tokens.Palette.white
-        BandType.MISSING_OUT -> Tokens.Palette.warning600
-        else -> Tokens.Palette.success600
+    // A band's seal follows its green. Offer is the only one on the deep ramp, so it is the only
+    // one that takes the #065F41 rosette; the plain #039855 one would disappear into that fill.
+    val asset = when (type) {
+        BandType.NOT_ENOUGH -> R.drawable.ic_band_alert_red
+        BandType.MISSING_OUT -> R.drawable.ic_band_alert_amber
+        BandType.OFFER -> R.drawable.ic_band_bonus_dark
+        else -> R.drawable.ic_band_bonus
     }
 
-    Box(
-        Modifier
+    Image(
+        painter = painterResource(asset),
+        contentDescription = null,
+        modifier = Modifier
             .size(26.dp)
-            .rotate(if (animate) angle else 0f),
-        contentAlignment = Alignment.Center
-    ) {
-        when (type) {
-            BandType.NOT_ENOUGH -> WalletGlyph(tint)
-            else -> TagGlyph(tint, Color.White.copy(alpha = 0.92f))
-        }
-    }
+            .rotate(if (animate) angle else 0f)
+    )
 }
