@@ -4,7 +4,6 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -78,10 +77,12 @@ fun SeeMoreOptions(
             fontWeight = FontWeight.Normal,
             color = Tokens.Palette.gray500
         )
-        Spacer(Modifier.width(6.dp))
+        // 22, and butted straight against the label. The chevron's own artwork carries the
+        // breathing room, so a Spacer here is a second gap — on the prototype the label's box
+        // and the glyph's box touch, and the pill measures exactly 30 tall by 139.8 wide.
         ChevronGlyph(
             tint = Tokens.Palette.gray500,
-            modifier = Modifier.size(18.dp).rotate(angle)
+            modifier = Modifier.size(22.dp).rotate(angle)
         )
     }
 }

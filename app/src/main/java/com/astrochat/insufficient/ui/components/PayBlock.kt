@@ -42,24 +42,27 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.astrochat.insufficient.R
 import com.astrochat.insufficient.ui.theme.Tokens
 
 /**
- * "CONGRATULATIONS! / ₹N / will be added to your wallet" — the foil card above the pay bar.
+ * "Nice! Pay now & get / ₹N / added in your wallet" — the foil card above the pay bar.
  *
  * The foil is a sweep gradient under a radial highlight, with a very fine rotating ray pattern
  * on top at 8.5% opacity. That last layer is what makes it read as foil rather than as a green
  * gradient; drop it and the card goes flat, which is the usual reason this gets rebuilt wrong.
  *
  * TWO foils, and which one shows is not decorative. When the amount earns nothing at all — no
- * bonus and no coupon, which on this table is ₹50 alone — the card turns GOLD and drops the
- * "CONGRATULATIONS!" eyebrow, because there is nothing to congratulate. Keeping it green would
- * have the card celebrating a plain top-up.
+ * bonus and no coupon, which on this table is ₹50 alone — the card turns GOLD. Gold keeps the
+ * line but drops the "Nice!": there is nothing to congratulate on a plain top-up, though "Pay
+ * now & get" is still the instruction. An earlier revision hid the whole line under gold.
  *
  * Only the TOP corners are rounded — the card's bottom edge is covered by the white arc below.
  */
@@ -118,19 +121,32 @@ fun CongratsCard(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 modifier = Modifier.padding(horizontal = 18.dp)
             ) {
-                if (!gold) {
-                    Text(
-                        "CONGRATULATIONS!",
-                        fontSize = 11.5.sp,
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 0.7.sp,
-                        color = Tokens.Palette.success800
-                    )
-                }
-                val ink = if (gold) GoldCardInk else CardInk
+                // Figma 4812:2508. Sentence case at Body X Small, with only the leading "Nice!"
+                // bold and green — it used to be an uppercase letterspaced CONGRATULATIONS! set
+                // in the card's own hue, which competed with the figure right under it.
+                Text(
+                    buildAnnotatedString {
+                        if (!gold) {
+                            withStyle(
+                                SpanStyle(
+                                    fontWeight = FontWeight.Bold,
+                                    color = Tokens.Palette.success800
+                                )
+                            ) { append("Nice!") }
+                            append(" ")
+                        }
+                        append("Pay now & get")
+                    },
+                    style = Tokens.Type.bodyXs,
+                    fontWeight = FontWeight.Medium,
+                    color = Tokens.Palette.gray800
+                )
                 Row(
                     Modifier
-                        .padding(top = 8.dp)
+                        // 11 = the 3dp gap under the eyebrow plus the amount block's own 8dp
+                        // lead-in. Figma draws 6 in that gap; on the running screen 6 floated
+                        // the figure away from the line above it.
+                        .padding(top = 11.dp)
                         // The figure takes the hit as the flying chip lands on it. Driven from
                         // the screen so the bump is on the same frame as the landing, not on a
                         // timer that can drift out of step with it.
@@ -139,32 +155,34 @@ fun CongratsCard(
                     verticalAlignment = Alignment.Top,
                     horizontalArrangement = Arrangement.spacedBy(3.dp)
                 ) {
-                    Text("₹", fontSize = 17.sp, lineHeight = 17.sp, fontWeight = FontWeight.Bold, color = ink)
+                    Text("₹", fontSize = 17.sp, lineHeight = 17.sp, fontWeight = FontWeight.Bold, color = CardInk)
                     Text(
                         "$credit",
-                        fontSize = 31.sp, lineHeight = 31.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        letterSpacing = (-1).sp,
+                        fontSize = 30.sp, lineHeight = 30.sp,
+                        fontWeight = FontWeight.Bold,
                         // Tabular figures, or the whole card shifts left and right on every
                         // frame of the count-up as the glyph widths change under it.
                         style = TextStyle(fontFeatureSettings = "tnum"),
-                        color = ink
+                        color = CardInk
                     )
                 }
                 Text(
-                    "will be added to your wallet",
-                    fontSize = 12.5.sp,
+                    "added in your wallet",
+                    style = Tokens.Type.bodyXs,
                     fontWeight = FontWeight.Medium,
                     color = Tokens.Palette.gray800,
-                    modifier = Modifier.padding(top = 8.dp)
+                    modifier = Modifier.padding(top = 6.dp)
                 )
             }
         }
     }
 }
 
-private val CardInk = Color(0xFF04301F)
-private val GoldCardInk = Color(0xFF3F3417)
+/**
+ * ONE ink for both foils now — Gray/800 at 90%, where green used to take `#04301F` and gold
+ * `#3F3417`. The figure no longer tries to be part of the foil; the foil sits behind it.
+ */
+private val CardInk = Color(0xFF1D2939).copy(alpha = 0.9f)
 
 /**
  * The foil itself. Three layers, bottom to top: the sweep, a slowly rotating ray comb, and a

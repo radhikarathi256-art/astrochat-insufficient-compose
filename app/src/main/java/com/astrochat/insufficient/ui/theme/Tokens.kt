@@ -67,8 +67,13 @@ object Tokens {
         val white = Color(0xFFFFFFFF)
         val black = Color(0xFF000000)
 
-        /** Phone chrome behind the sheet. Deliberately has NO Figma style — it is not a product colour. */
-        val appBackground = Color(0xFFEEF0F3)
+        /**
+         * Behind the sheet. WHITE — measured off the prototype, where `.am` and everything under
+         * it is `#fff` from the nav divider to the pay bar. This was a grey `#EEF0F3` invented as
+         * "phone chrome"; it has no Figma style behind it and it tinted the largest area of the
+         * screen, including the gap under the receipt card, a colour the design never had.
+         */
+        val appBackground = Color(0xFFFFFFFF)
     }
 
     /**
@@ -123,7 +128,7 @@ object Tokens {
         val popupRadius = 16.dp
 
         val bandWidth = 328.dp
-        val bandHeight = 89.dp
+        val bandHeight = 91.dp    // measured on the running band, not the Figma frame's 89
         /** The band's bottom 42dp sits BEHIND the receipt card — it is padding, not empty space. */
         val bandHiddenBehindCard = 42.dp
 

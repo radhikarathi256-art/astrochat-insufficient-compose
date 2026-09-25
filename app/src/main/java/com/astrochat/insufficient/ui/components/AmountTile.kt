@@ -70,11 +70,15 @@ fun AmountTile(
         Box(
             Modifier
                 .fillMaxWidth()
-                // 89 x 67 expressed as a ratio so the row can stretch on wider phones without
-                // the tiles going off-spec relative to each other. It is 89/67 and not a
-                // rounded 1/0.81 — at 0.81 the tile is 7% too tall, which on a 411dp screen is
-                // enough to push the badge past the 96dp row and get it clipped.
-                .aspectRatio(89f / 67f)
+                // 1 : 0.81, which is what the prototype's `.box` actually sets. The Figma
+                // component is 89 x 67 and this used to use that ratio, but 89/67 draws the tile
+                // 7% SHORT of the running screen — at the stretched width of 90.7 it is 68.3
+                // tall against the prototype's 73.4, and three tiles that size read as a
+                // different row. Expressed as a ratio so the row can stretch on wider phones
+                // without the tiles going off-spec relative to each other.
+                //
+                // It still clears the 96dp row: 73.4 tile + 26.5 badge - 11 overlap = 88.9.
+                .aspectRatio(1f / 0.81f)
                 .scale(press)
                 .shadow(
                     elevation = if (selected) 6.dp else 4.dp,
