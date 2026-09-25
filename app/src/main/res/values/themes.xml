@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Compose draws everything, so the platform theme only needs to not fight it: no action
+         bar, and a window background that matches the phone chrome behind the sheet so there
+         is no white flash between launch and first frame. -->
+    <style name="Theme.AstroChatInsufficient" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">#EEF0F3</item>
+        <item name="android:statusBarColor">#FFFFFF</item>
+        <item name="android:navigationBarColor">#FFFFFF</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowLightNavigationBar">true</item>
+    </style>
+</resources>
