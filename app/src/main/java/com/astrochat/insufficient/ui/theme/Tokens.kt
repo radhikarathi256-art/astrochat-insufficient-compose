@@ -129,8 +129,15 @@ object Tokens {
 
         val bandWidth = 328.dp
         val bandHeight = 91.dp    // measured on the running band, not the Figma frame's 89
-        /** The band's bottom 42dp sits BEHIND the receipt card — it is padding, not empty space. */
-        val bandHiddenBehindCard = 42.dp
+        /**
+         * The band's bottom 32dp sits BEHIND the receipt card — it is padding, not empty space.
+         *
+         * 32, measured on the running prototype: band top 91.3, band height 103.9 and receipt
+         * top 158.7 at a 1.1417 scale, so the overlap is (91.3 + 103.9 - 158.7) / 1.1417. It was
+         * 42, which ate 10dp of the pink and pulled the receipt, the tiles and the See button up
+         * with it — the band looked short and everything below it sat high.
+         */
+        val bandHiddenBehindCard = 32.dp
 
         val receiptTop = 139.dp
         val receiptHeight = 224.8f.dp
@@ -147,6 +154,16 @@ object Tokens {
 
         val seeButtonTop = 171.4f.dp  // relative to the receipt card
         val seeButtonHeight = 28.dp
+
+        /**
+         * Congratulations card + arc. The arc is NOT stacked under the card — it is drawn over
+         * the card's bottom 22dp, which is why the card carries no bottom radius. Wrap 110 =
+         * card 108 with the 24-tall arc bottom-aligned inside it, so only 2dp of arc hangs
+         * below the card and the visible bottom edge of the card IS the arc's curve.
+         */
+        val congratsCardHeight = 108.dp
+        val cardArcHeight = 24.dp
+        val cardWrapHeight = 110.dp
 
         /** How deep the receipt's bottom edge bows. Drives the corner roundness too. */
         val receiptBowDepth = 72.dp
@@ -167,6 +184,8 @@ object Tokens {
         val easeOut: Easing = CubicBezierEasing(0.2f, 0.8f, 0.2f, 1f)
         val easeGentle: Easing = CubicBezierEasing(0.22f, 1f, 0.36f, 1f)
         val spring: Easing = CubicBezierEasing(0.2f, 1.3f, 0.4f, 1f)
+        /** CSS `ease-in-out`, for the two one-shot shakes. */
+        val easeInOut: Easing = CubicBezierEasing(0.42f, 0f, 0.58f, 1f)
 
         const val expandMs = 360
         const val collapseMs = 520
@@ -176,6 +195,13 @@ object Tokens {
         const val popupHoldMs = 2300
         const val popupOutMs = 250
         const val bandSwapMs = 420
+        const val popupBadgeDelayMs = 300
+        const val popupBadgeWiggleMs = 1200
+        /** `chipSweep` — one pass of light across a bonus badge, then a gap before the next. */
+        const val chipSweepMs = 3200
+        /** `.ps-details` grid-rows 0fr -> 1fr, and the veil blur that rides with it. */
+        const val summaryOpenMs = 400
+        const val veilFadeMs = 300
     }
 
     /**
@@ -236,6 +262,14 @@ object Tokens {
             0.663f to Color(0xFF027A48), 1f to Color(0xFF039855)
         )
 
+        /**
+         * A single falling coin on the hero tile. Lit from the top so the spin reads — a flat
+         * gold fill squashed by the rotation looks like a shrinking pill, not a turning disc.
+         */
+        val coin = Brush.verticalGradient(
+            0f to Color(0xFFFBE3A4), 0.45f to Color(0xFFE9B949), 1f to Color(0xFFC08A22)
+        )
+
         /** Type=Missing out — amber, shown when a better tier is one tap away. */
         val missingOut = h(
             0f to Color(0xFFFEF5DE).copy(alpha = 0.6f),
@@ -251,13 +285,71 @@ object Tokens {
          * and reads as a separate green bar under it, and at Figma's own 75% the green went
          * milky. 85% is Radhika's call and is what the prototype ships. The tail stop tracks
          * it: Success/600 at 38.5% of the layer, i.e. .385 x .85 = .32725.
+         *
+         * It runs TOP TO BOTTOM, not left to right — the prototype's rule is a bare
+         * `linear-gradient(...)`, whose default direction is `to bottom`. Drawn horizontally
+         * (which is what this did) the dark Success/700 end lands on the "+₹" instead of along
+         * the top edge, and the pill reads as a different green.
          */
-        val badgeGreen = h(
+        val badgeGreen = Brush.verticalGradient(
             0f to Color(0xFF027A48).copy(alpha = 0.85f),
             0.10f to Color(0xFF027A48).copy(alpha = 0.85f),
             0.233f to Color(0xFF039855).copy(alpha = 0.85f),
             0.839f to Color(0xFF039855).copy(alpha = 0.85f),
             1f to Color(0xFF039855).copy(alpha = 0.32725f)
+        )
+
+        /**
+         * The popup's title panel — Figma `5150:15945`, `linear-gradient(84deg, …)`.
+         *
+         * 84deg is 6 degrees off "to right", which at 236x70 is within a pixel of horizontal,
+         * so it is drawn as a plain horizontal gradient. Success/300 at 40% dying to nothing:
+         * this is the wash that carries the badge's green down into the white card.
+         */
+        val popupTitle = h(
+            0f to Color(0xFF6CE9A6).copy(alpha = 0.40f),
+            0.447f to Color(0xFF6CE9A6).copy(alpha = 0.10f),
+            1f to Color(0xFFFFFFFF).copy(alpha = 0.10f)
+        )
+
+        /**
+         * The travelling highlight on a bonus badge — `chipSweep`. White at 40% in the middle of
+         * a 38%-wide band, transparent at both ends, so it reads as light crossing the pill
+         * rather than a white shape sliding over it.
+         */
+        val chipSweep = h(
+            0f to Color(0x00FFFFFF),
+            0.5f to Color(0xFFFFFFFF).copy(alpha = 0.4f),
+            1f to Color(0x00FFFFFF)
+        )
+
+        /**
+         * `.veilfade` — the wash that appears behind the pay block once the SKU sheet or the
+         * payment summary is open. It exists to kill the amounts showing through from behind the
+         * congratulations card, and it ramps from nothing at the top to solid at the bottom so
+         * there is no seam where it starts.
+         *
+         * On the web it also carries a 4px backdrop blur. That part is not portable: Compose has
+         * no masked backdrop filter, and blurring the whole scroller merely because the sheet
+         * opened would soften the tiles the user is picking from. The tint is the part that does
+         * the work; the blur is kept for the summary-open state, where the prototype blurs
+         * everything above the pay block anyway.
+         */
+        val veilGreen = Brush.verticalGradient(
+            0f to Color(0xFFECFDF3).copy(alpha = 0f),
+            0.34f to Color(0xFFE6FAEF).copy(alpha = 0.30f),
+            0.66f to Color(0xFFD6F4E5).copy(alpha = 0.72f),
+            0.86f to Color(0xFFC9EFDC).copy(alpha = 0.94f),
+            1f to Color(0xFFC6EEDB)
+        )
+
+        /** The same veil under the gold card — a plain top-up earns the amber wash, not the green. */
+        val veilGold = Brush.verticalGradient(
+            0f to Color(0xFFFBF6EA).copy(alpha = 0f),
+            0.34f to Color(0xFFFAF3E4).copy(alpha = 0.34f),
+            0.66f to Color(0xFFF6ECD2).copy(alpha = 0.74f),
+            0.86f to Color(0xFFF2E6C8).copy(alpha = 0.94f),
+            1f to Color(0xFFF1E4C4)
         )
     }
 

@@ -1,0 +1,13 @@
+<!-- close.svg, path-for-path. Round caps and joins; the stroke is 2 on a 16 grid. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="16dp"
+    android:height="16dp"
+    android:viewportWidth="16"
+    android:viewportHeight="16">
+    <path
+        android:pathData="M12,4L4,12M4,4L12,12"
+        android:strokeWidth="2"
+        android:strokeColor="#344054"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+</vector>

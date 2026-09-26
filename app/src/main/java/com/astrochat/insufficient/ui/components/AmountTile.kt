@@ -1,6 +1,10 @@
 package com.astrochat.insufficient.ui.components
 
+import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -26,6 +30,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
@@ -60,7 +65,10 @@ fun AmountTile(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     onBadgePlaced: (Rect) -> Unit = {},
-    badgeHidden: Boolean = false
+    badgeHidden: Boolean = false,
+    coins: Boolean = false,
+    sweep: Boolean = false,
+    sweepDelayMs: Int = 0
 ) {
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
@@ -96,6 +104,13 @@ fun AmountTile(
                 .clickable(interactionSource = interaction, indication = null, onClick = onClick),
             contentAlignment = Alignment.Center
         ) {
+            // Under the figure, and only on the tile the prototype marks as the hero. It stops
+            // dead once that tile is the selected one — the shower is an invitation, and leaving
+            // it running after the tap makes the tile look like it is still asking to be picked.
+            if (coins && !selected) {
+                CoinShower(Modifier.fillMaxSize().padding(bottom = 11.dp))
+            }
+
             // The rupee sign sits on the figure's cap height, not its baseline — hence the
             // fixed width and the taller line height on the small glyph.
             Row(verticalAlignment = Alignment.Top) {
@@ -124,6 +139,8 @@ fun AmountTile(
         if (bonus > 0) {
             BonusBadge(
                 bonus = bonus,
+                sweep = sweep,
+                sweepDelayMs = sweepDelayMs,
                 modifier = Modifier
                     .graphicsLayer {
                         translationY = -Tokens.Dimens.badgeOverlap.toPx()
@@ -137,6 +154,68 @@ fun AmountTile(
         }
     }
 }
+
+/**
+ * Coins raining down the hero tile.
+ *
+ * The prototype plays a dotLottie here, but its own CSS fallback (`@keyframes coinFall`) is the
+ * spec that is actually readable: five coins on a 3.6s loop, staggered so no two land together,
+ * falling from 22 above the tile to 82 below it while they spin 220°. They are parked at the far
+ * left and far right because the middle of the tile belongs to the amount — the prototype even
+ * masks the middle 24–76% out rather than trusting the placement.
+ *
+ * Drawn as one Canvas off a single clock rather than five animated composables: five infinite
+ * transitions on a tile that is rebuilt on every tap is how this ends up dropping frames.
+ */
+@Composable
+private fun CoinShower(modifier: Modifier = Modifier) {
+    val t = rememberInfiniteTransition(label = "coinfall")
+    val clock by t.animateFloat(
+        initialValue = 0f,
+        targetValue = COIN_CYCLE_MS,
+        animationSpec = infiniteRepeatable(
+            tween(COIN_CYCLE_MS.toInt(), easing = androidx.compose.animation.core.LinearEasing)
+        ),
+        label = "clock"
+    )
+    androidx.compose.foundation.Canvas(modifier) {
+        COINS.forEach { (leftFraction, diameterDp, delayMs) ->
+            // Each coin runs the same 0..1 cycle, just entered at a different point.
+            val p = (((clock - delayMs) % COIN_CYCLE_MS) + COIN_CYCLE_MS) % COIN_CYCLE_MS / COIN_CYCLE_MS
+            val d = diameterDp.dp.toPx()
+            val cx = leftFraction * size.width + d / 2f
+            val cy = (-22f + (82f + 22f) * p).dp.toPx() + d / 2f
+            // 0 -> .95 by 12%, held to 80%, then out. The fade-in is fast because a coin that
+            // materialises slowly reads as a glow rather than as something falling.
+            val alpha = when {
+                p < 0.12f -> p / 0.12f * 0.95f
+                p < 0.80f -> 0.95f
+                else -> (1f - p) / 0.20f * 0.95f
+            }
+            if (alpha <= 0f) return@forEach
+            // The spin is what makes it a coin and not a dot: squashing the width by cos of the
+            // rotation turns the disc edge-on twice a turn.
+            val spin = Math.toRadians((220f * p).toDouble())
+            val squash = kotlin.math.abs(kotlin.math.cos(spin)).toFloat().coerceAtLeast(0.14f)
+            drawOval(
+                brush = Tokens.BandBrush.coin,
+                topLeft = Offset(cx - d * squash / 2f, cy - d / 2f),
+                size = androidx.compose.ui.geometry.Size(d * squash, d),
+                alpha = alpha
+            )
+        }
+    }
+}
+
+/** left fraction of the tile, diameter in dp, start delay in ms — the prototype's own five. */
+private val COINS = listOf(
+    Triple(0.02f, 15f, 0f),
+    Triple(0.81f, 15f, 900f),
+    Triple(0.04f, 13f, 1800f),
+    Triple(0.83f, 13f, 2700f),
+    Triple(0.01f, 14f, 3300f)
+)
+private const val COIN_CYCLE_MS = 3600f
 
 /**
  * The orange corner wedge with its tick — `tile-selected.svg`.
@@ -212,9 +291,30 @@ private const val WEDGE_HEIGHT_FRACTION = 0.5f
  * The figure is 12sp ExtraBold while "+₹" and "more" stay 10sp/600: the number carries the
  * hierarchy on its own, and the line height is pinned so the larger inline type cannot grow the
  * badge. The card's whole vertical rhythm below is measured off this badge's height.
+ *
+ * [sweep] is the prototype's `chipSweep` — a band of light crossing the pill. It is NOT always
+ * on: the prototype gates it behind `.lure`, so the badges only advertise themselves while the
+ * PICKED amount earns nothing. Once the user is on an amount that already pays a bonus the
+ * badges have made their point, and leaving the light running turns the whole row into a
+ * carousel. [sweepDelayMs] staggers it 380ms a tile so the three do not pulse in unison.
  */
 @Composable
-fun BonusBadge(bonus: Int, modifier: Modifier = Modifier, elevated: Boolean = false) {
+fun BonusBadge(
+    bonus: Int,
+    modifier: Modifier = Modifier,
+    elevated: Boolean = false,
+    sweep: Boolean = false,
+    sweepDelayMs: Int = 0
+) {
+    val sweepClock = rememberInfiniteTransition(label = "chipSweep")
+    val sweepT by sweepClock.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            tween(Tokens.Motion.chipSweepMs, easing = androidx.compose.animation.core.LinearEasing)
+        ),
+        label = "chipSweepClock"
+    )
     Row(
         modifier
             .then(
@@ -226,6 +326,22 @@ fun BonusBadge(bonus: Int, modifier: Modifier = Modifier, elevated: Boolean = fa
             // and is specified against a white base, not against whatever it happens to overlap.
             .background(Tokens.Palette.white)
             .background(Tokens.BandBrush.badgeGreen)
+            // After the clip, so the band is cut off at the pill's rounded edge instead of
+            // sliding out past it. The CSS equivalent is the `overflow:hidden` on `.chip`.
+            .drawWithContent {
+                drawContent()
+                if (!sweep) return@drawWithContent
+                // Light crosses in the first 42% of the cycle and then waits offscreen. The
+                // pause is the point: a band that crosses continuously reads as a barber pole.
+                val phase = (sweepT + sweepDelayMs / Tokens.Motion.chipSweepMs.toFloat()) % 1f
+                val run = (phase / 0.42f).coerceAtMost(1f)
+                val band = size.width * 0.38f
+                drawRect(
+                    brush = Tokens.BandBrush.chipSweep,
+                    topLeft = Offset(band * (-1.2f + 4.2f * run), 0f),
+                    size = androidx.compose.ui.geometry.Size(band, size.height)
+                )
+            }
             .padding(horizontal = 8.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -246,29 +362,77 @@ fun BonusBadge(bonus: Int, modifier: Modifier = Modifier, elevated: Boolean = fa
  * It is rendered by the screen at ROOT level, not inside the card, because it has to travel
  * across both — anything parented lower gets clipped by the receipt card on the way down.
  *
- * [progress] runs 0..1 over the flight. The path is a straight line in x and an eased fall in y
- * with a lift subtracted, so it leaves the tile upward before it drops — a straight interpolation
- * between the two points reads as the pill being dragged rather than thrown.
+ * [progress] runs 0..1 over the flight, and the path is the prototype's `flyBonus` keyframes
+ * rather than a curve of my own: the velocity profile IS the brief, and it is fast, slow, fast.
+ * The chip leaves the tile hard and decelerates into an apex 76 above it; hangs there through
+ * the direction change (8 of travel over 12% of the flight); then falls away from the apex
+ * ACCELERATING the whole way, fastest on impact, landing on the same frame the count starts.
+ *
+ * The obvious version — a sine lift over an ease-OUT fall — gets the shape roughly right and the
+ * speed exactly backwards: it arrives slowly and stops, which reads as the pill being set down
+ * instead of caught. That is the difference between this looking like the prototype and not.
+ *
+ * The fall is ONE interval. Every extra waypoint would restart its own easing from zero velocity
+ * and put a visible hitch just before the card, which is why the 86% keyframe carries opacity
+ * alone — opacity is interpolated separately and so does not split the transform.
  */
 @Composable
 fun BonusFlyer(bonus: Int, from: Rect, to: Offset, progress: Float, modifier: Modifier = Modifier) {
     val p = progress.coerceIn(0f, 1f)
-    val fall = 1f - (1f - p) * (1f - p) * (1f - p)   // easeOutCubic
-    val lift = 34.dp
+    // Centre-to-centre, measured at call time, exactly as the prototype measures it.
+    val dx = to.x - (from.left + from.width / 2f)
+    val dy = to.y - (from.top + from.height / 2f)
+
+    // Which interval we are in, and how far through it after that interval's own easing.
+    val (leg, q) = when {
+        p < 0.22f -> 0 to ARC_LAUNCH.transform(p / 0.22f)
+        p < 0.34f -> 1 to ARC_HANG.transform((p - 0.22f) / 0.12f)
+        else -> 2 to ARC_FALL.transform((p - 0.34f) / 0.66f)
+    }
+    fun lerp(a: Float, b: Float) = a + (b - a) * q
 
     Box(
         modifier.graphicsLayer {
-            val lifted = lift.toPx() * kotlin.math.sin(p * Math.PI).toFloat()
-            translationX = from.left + (to.x - from.width / 2f - from.left) * p
-            translationY = from.top + (to.y - from.height / 2f - from.top) * fall - lifted
-            // Shrinks as it falls, so it reads as going INTO the card rather than onto it.
-            val s = 1f - 0.3f * p
+            val apex = -76.dp.toPx()
+            val hang = -68.dp.toPx()
+            val tx: Float
+            val ty: Float
+            val s: Float
+            val rot: Float
+            when (leg) {
+                0 -> { tx = lerp(0f, dx * 0.03f); ty = lerp(0f, apex); s = lerp(1f, 0.92f); rot = lerp(0f, -9f) }
+                1 -> { tx = lerp(dx * 0.03f, dx * 0.12f); ty = lerp(apex, hang); s = lerp(0.92f, 0.86f); rot = lerp(-9f, -3f) }
+                else -> { tx = lerp(dx * 0.12f, dx); ty = lerp(hang, dy); s = lerp(0.86f, 0.34f); rot = lerp(-3f, 5f) }
+            }
+            translationX = from.left + tx
+            translationY = from.top + ty
             scaleX = s; scaleY = s
-            transformOrigin = TransformOrigin(0f, 0f)
-            // Holds full opacity almost the whole way; it should look absorbed, not evaporated.
-            alpha = if (p < 0.82f) 1f else (1f - p) / 0.18f
+            rotationZ = rot
+            // Scale and rotation pivot on the chip's middle, as CSS does; the translation above
+            // still places its top-left, so the two are independent.
+            transformOrigin = TransformOrigin.Center
+            // Fades UP off the tile so the chip does not double the badge still sitting there,
+            // then holds solid to 86% and goes out on the last 14% as the card takes it.
+            alpha = when {
+                p < 0.22f -> ARC_LAUNCH.transform(p / 0.22f)
+                p < 0.86f -> 1f
+                else -> 1f - (p - 0.86f) / 0.14f
+            }
         }
     ) {
         BonusBadge(bonus = bonus, elevated = true)
     }
 }
+
+/** Off the tile: nearly all the speed in the first third, decelerating into the apex. */
+private val ARC_LAUNCH = CubicBezierEasing(0.12f, 0.8f, 0.25f, 1f)
+
+/** The direction change. Symmetric and slow — this is the hang. */
+private val ARC_HANG = CubicBezierEasing(0.45f, 0.0f, 0.55f, 1f)
+
+/**
+ * The fall. Kept near free fall (distance proportional to t squared): it covers 8/30/62/85% of
+ * the drop at quarter/half/three-quarter/nine-tenths time, against free fall's 6/25/56/81.
+ * A steeper ease-in reads as hovering and then teleporting.
+ */
+private val ARC_FALL = CubicBezierEasing(0.4f, 0.0f, 0.8f, 0.7f)

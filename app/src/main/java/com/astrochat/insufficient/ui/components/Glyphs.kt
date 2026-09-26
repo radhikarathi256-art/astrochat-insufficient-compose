@@ -69,6 +69,17 @@ fun BackGlyph(tint: Color, modifier: Modifier = Modifier) {
     )
 }
 
+/** The X on the button that shuts the open payment summary. */
+@Composable
+fun CloseGlyph(tint: Color, modifier: Modifier = Modifier) {
+    Image(
+        painter = painterResource(R.drawable.ic_close),
+        contentDescription = null,
+        colorFilter = ColorFilter.tint(tint),
+        modifier = modifier
+    )
+}
+
 /**
  * The selected-tile tick, drawn progressively so it can animate on.
  *

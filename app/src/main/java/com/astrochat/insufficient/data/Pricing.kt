@@ -26,6 +26,9 @@ object Pricing {
     /** The three shown before "See More Options". */
     val collapsedSkus: List<Sku> get() = skus.take(3)
 
+    /** The tile the coin shower plays on — `ab.coin` in the prototype, which defaults to 250. */
+    const val COIN_SKU = 250
+
     const val COUPON_FLAT = 50
     const val GST_RATE = 0.18
 

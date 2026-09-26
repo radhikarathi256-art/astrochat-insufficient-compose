@@ -1,6 +1,5 @@
 package com.astrochat.insufficient.ui.components
 
-import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
@@ -23,8 +22,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
@@ -168,22 +167,26 @@ private fun emphasise(marked: String): AnnotatedString = buildAnnotatedString {
  * something. The Not enough band used to draw a wallet, and a wallet reads as "top up" — the
  * neutral message — exactly where the screen needs to say the chat cannot start.
  *
- * It wiggles slowly — 3.4s on the calm bands, faster on the promo ones, matching the prototype's
- * `tagWiggle`.
+ * It wiggles on the prototype's own `tagWiggle` timing, which is NOT a metronome: the seal holds
+ * dead still for the first 62% of a 3.4s cycle and then snaps through -13 / +10 / -7 / +4 / -2
+ * degrees, scaling up 8% on the two big swings. This used to rock smoothly between -6 and +6 for
+ * the whole cycle, which at 26dp is close to invisible — a constant slow drift reads as a
+ * rendering artefact, and the stillness is what makes the shake land when it comes.
  */
 @Composable
 private fun BandIcon(type: BandType, animate: Boolean) {
     val periodMs = if (type == BandType.OFFER || type == BandType.COUPON) 1500 else 3400
     val transition = rememberInfiniteTransition(label = "tag")
-    val angle by transition.animateFloat(
-        initialValue = -6f,
-        targetValue = 6f,
+    val t by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
         animationSpec = infiniteRepeatable(
-            animation = tween(periodMs / 2, easing = androidx.compose.animation.core.FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
+            animation = tween(periodMs, easing = androidx.compose.animation.core.LinearEasing)
         ),
-        label = "tagAngle"
+        label = "tagClock"
     )
+    val angle = stageValue(t, TAG_ANGLE)
+    val bump = stageValue(t, TAG_SCALE)
 
     // A band's seal follows its green. Offer is the only one on the deep ramp, so it is the only
     // one that takes the #065F41 rosette; the plain #039855 one would disappear into that fill.
@@ -199,6 +202,41 @@ private fun BandIcon(type: BandType, animate: Boolean) {
         contentDescription = null,
         modifier = Modifier
             .size(26.dp)
-            .rotate(if (animate) angle else 0f)
+            .graphicsLayer {
+                rotationZ = if (animate) angle else 0f
+                val s = if (animate) bump else 1f
+                scaleX = s
+                scaleY = s
+            }
     )
+}
+
+/** `@keyframes tagWiggle` — stop position 0..1 to degrees. */
+private val TAG_ANGLE = listOf(
+    0f to 0f, 0.62f to 0f, 0.68f to -13f, 0.74f to 10f,
+    0.80f to -7f, 0.86f to 4f, 0.92f to -2f, 1f to 0f
+)
+
+/** The same cycle's scale track — only the first two swings grow. */
+private val TAG_SCALE = listOf(
+    0f to 1f, 0.62f to 1f, 0.68f to 1.08f, 0.74f to 1.08f,
+    0.80f to 1.04f, 0.86f to 1f, 1f to 1f
+)
+
+/**
+ * Piecewise-linear read of a CSS keyframe track. Compose has no `@keyframes`, and the usual
+ * workaround — one `animateFloat` per segment — cannot express "hold, then shake" without a
+ * chain of delays that drifts out of phase with itself.
+ */
+internal fun stageValue(t: Float, stops: List<Pair<Float, Float>>): Float {
+    val p = t.coerceIn(0f, 1f)
+    for (i in 0 until stops.size - 1) {
+        val (t0, v0) = stops[i]
+        val (t1, v1) = stops[i + 1]
+        if (p <= t1) {
+            if (t1 == t0) return v1
+            return v0 + (v1 - v0) * ((p - t0) / (t1 - t0))
+        }
+    }
+    return stops.last().second
 }

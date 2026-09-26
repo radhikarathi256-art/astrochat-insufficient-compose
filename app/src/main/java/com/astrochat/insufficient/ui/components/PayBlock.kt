@@ -53,7 +53,7 @@ import com.astrochat.insufficient.R
 import com.astrochat.insufficient.ui.theme.Tokens
 
 /**
- * "Nice! Pay now & get / ₹N / added in your wallet" — the foil card above the pay bar.
+ * "Nice! Pay Now & Get / ₹N / Added in Your Wallet" — the foil card above the pay bar.
  *
  * The foil is a sweep gradient under a radial highlight, with a very fine rotating ray pattern
  * on top at 8.5% opacity. That last layer is what makes it read as foil rather than as a green
@@ -62,7 +62,7 @@ import com.astrochat.insufficient.ui.theme.Tokens
  * TWO foils, and which one shows is not decorative. When the amount earns nothing at all — no
  * bonus and no coupon, which on this table is ₹50 alone — the card turns GOLD. Gold keeps the
  * line but drops the "Nice!": there is nothing to congratulate on a plain top-up, though "Pay
- * now & get" is still the instruction. An earlier revision hid the whole line under gold.
+ * Now & Get" is still the instruction. An earlier revision hid the whole line under gold.
  *
  * Only the TOP corners are rounded — the card's bottom edge is covered by the white arc below.
  */
@@ -81,7 +81,7 @@ fun CongratsCard(
             // 360dp handset and visibly narrow on anything wider — a Pixel 6 Pro is 411dp, and
             // the card lost 14% of the screen it is supposed to span.
             .fillMaxWidth(268f / 360f)
-            .height(108.dp)
+            .height(Tokens.Dimens.congratsCardHeight)
             // Picking an amount tips the card in Z and settles it back. The perspective has to
             // be set here: without it a rotationX is an orthographic squash, not a tilt.
             .graphicsLayer {
@@ -91,7 +91,15 @@ fun CongratsCard(
                 val s = 1f + 0.03f * tilt
                 scaleX = s; scaleY = s
             }
-            .shadow(6.dp, RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp))
+            // The prototype's own shadow is TINTED to the foil — `rgba(4,60,38,.16)` under green
+            // and `rgba(80,58,10,.14)` under gold. Compose's default is black, which under a
+            // gold card reads as grey soot rather than as the card's own weight.
+            .shadow(
+                elevation = 6.dp,
+                shape = RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp),
+                ambientColor = if (gold) Color(0xFF503A0A) else Color(0xFF043C26),
+                spotColor = if (gold) Color(0xFF503A0A) else Color(0xFF043C26)
+            )
             .clip(RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp))
             // The 1.5dp rim, on a 150deg axis. Green is White 95% · Success/700 45% · White 85%.
             // Gold has NO token: the Warning ramp is a saturated amber and no opacity of it
@@ -121,7 +129,7 @@ fun CongratsCard(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 modifier = Modifier.padding(horizontal = 18.dp)
             ) {
-                // Figma 4812:2508. Sentence case at Body X Small, with only the leading "Nice!"
+                // Figma 4812:2508. Title case at Body X Small, with only the leading "Nice!"
                 // bold and green — it used to be an uppercase letterspaced CONGRATULATIONS! set
                 // in the card's own hue, which competed with the figure right under it.
                 Text(
@@ -135,7 +143,7 @@ fun CongratsCard(
                             ) { append("Nice!") }
                             append(" ")
                         }
-                        append("Pay now & get")
+                        append("Pay Now & Get")
                     },
                     style = Tokens.Type.bodyXs,
                     fontWeight = FontWeight.Medium,
@@ -153,7 +161,10 @@ fun CongratsCard(
                         .graphicsLayer { scaleX = 1f + absorb; scaleY = 1f + absorb }
                         .onGloballyPositioned { onFigurePlaced(it.boundsInRoot().center) },
                     verticalAlignment = Alignment.Top,
-                    horizontalArrangement = Arrangement.spacedBy(3.dp)
+                    // 2, not Figma's 4: the symbol is set 13sp smaller than the figure and sits
+                    // on its cap height, so the optical gap is already wider than the measured
+                    // one and anything above 2 reads as two separate words.
+                    horizontalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
                     Text("₹", fontSize = 17.sp, lineHeight = 17.sp, fontWeight = FontWeight.Bold, color = CardInk)
                     Text(
@@ -167,7 +178,7 @@ fun CongratsCard(
                     )
                 }
                 Text(
-                    "added in your wallet",
+                    "Added in Your Wallet",
                     style = Tokens.Type.bodyXs,
                     fontWeight = FontWeight.Medium,
                     color = Tokens.Palette.gray800,
@@ -262,7 +273,7 @@ private fun FoilSkin(gold: Boolean) {
  */
 @Composable
 fun CardArc(gold: Boolean, modifier: Modifier = Modifier) {
-    Canvas(modifier.fillMaxWidth().height(24.dp)) {
+    Canvas(modifier.fillMaxWidth().height(Tokens.Dimens.cardArcHeight)) {
         val w = size.width
         val h = size.height
         fun y(v: Float) = v / 24f * h
@@ -294,6 +305,10 @@ fun CardArc(gold: Boolean, modifier: Modifier = Modifier) {
 /**
  * Payment summary row. Collapsed it is a one-line "₹100 + ₹18 GST"; the chevron is the only
  * affordance, so it rotates on expand exactly like See More's does.
+ *
+ * The right-hand figure fades out when the row is open — the breakdown below it now states the
+ * amount and the GST on their own lines, so leaving the summed version in the header prints the
+ * same numbers twice.
  */
 @Composable
 fun PaymentSummaryRow(
@@ -308,6 +323,11 @@ fun PaymentSummaryRow(
         animationSpec = tween(300, easing = Tokens.Motion.easeOut),
         label = "sumChevron"
     )
+    val figureAlpha by androidx.compose.animation.core.animateFloatAsState(
+        targetValue = if (expanded) 0f else 1f,
+        animationSpec = tween(200),
+        label = "sumTxt"
+    )
     Row(
         modifier
             .fillMaxWidth()
@@ -318,8 +338,14 @@ fun PaymentSummaryRow(
     ) {
         Text("Payment Summary", fontSize = 13.5.sp, lineHeight = 18.sp, color = Tokens.Palette.gray500)
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text("₹$amount + ₹$gst GST", fontSize = 13.5.sp, lineHeight = 18.sp, color = Tokens.Palette.gray500)
-            ChevronGlyph(Tokens.Palette.gray500, Modifier.size(18.dp).rotate(angle))
+            Text(
+                "₹$amount + ₹$gst GST",
+                fontSize = 13.5.sp, lineHeight = 18.sp, color = Tokens.Palette.gray500,
+                modifier = Modifier.graphicsLayer { alpha = figureAlpha }
+            )
+            // 22 like See More's, not 18 — the chevron is the tallest thing in this row, so its
+            // size sets the row height. At 18 the row came out 44 against the prototype's 48.
+            ChevronGlyph(Tokens.Palette.gray500, Modifier.size(22.dp).rotate(angle))
         }
     }
 }
@@ -367,11 +393,14 @@ fun PayBar(total: Int, method: String, onPay: () -> Unit, modifier: Modifier = M
         Row(
             Modifier
                 .weight(200f)
+                // 48 fixed, not padding-derived. The prototype's button is 48 tall whatever the
+                // label says; letting the text size it gave 43 and the whole bar read short.
+                .height(48.dp)
                 .scale(if (pressed) 0.98f else 1f)
                 .clip(RoundedCornerShape(12.dp))
                 .background(Tokens.Palette.brand)
                 .clickable(interactionSource = interaction, indication = null, onClick = onPay)
-                .padding(horizontal = 18.dp, vertical = 12.dp),
+                .padding(horizontal = 18.dp),
             horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically
         ) {

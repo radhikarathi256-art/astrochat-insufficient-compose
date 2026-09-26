@@ -1,15 +1,21 @@
 package com.astrochat.insufficient.ui
 
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -23,6 +29,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
@@ -36,14 +43,18 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
 import com.astrochat.insufficient.data.BandType
 import com.astrochat.insufficient.data.Pricing
 import com.astrochat.insufficient.data.bandCopyFor
@@ -52,6 +63,7 @@ import com.astrochat.insufficient.ui.components.AmountTile
 import com.astrochat.insufficient.ui.components.BackGlyph
 import com.astrochat.insufficient.ui.components.BonusFlyer
 import com.astrochat.insufficient.ui.components.CardArc
+import com.astrochat.insufficient.ui.components.CloseGlyph
 import com.astrochat.insufficient.ui.components.CongratsCard
 import com.astrochat.insufficient.ui.components.OfferPopup
 import com.astrochat.insufficient.ui.components.PayBar
@@ -208,11 +220,18 @@ fun InsufficientScreen() {
             .background(Tokens.Palette.appBackground)
     ) {
         Column(Modifier.fillMaxSize()) {
-            TopNav()
+            // Opening the summary softens EVERYTHING behind the sheet, header included (Figma
+            // 5227:27592). The prototype needs two layers for it because its nav sits above the
+            // pay block in z and one backdrop filter cannot reach both; here it is two `blur`s
+            // for the same reason — the nav and the scroller are separate subtrees. 3 on the nav
+            // and 4 on the body, not one value: the nav is 4dp of type on white and blurs
+            // visibly softer than the coloured band does at the same radius.
+            TopNav(blur = if (summaryOpen) 3.dp else 0.dp, walletVisible = !summaryOpen)
 
             Column(
                 Modifier
                     .weight(1f)
+                    .blur(if (summaryOpen) 4.dp else 0.dp)
                     .verticalScroll(rememberScrollState())
             ) {
                 Spacer(Modifier.height(16.dp))
@@ -290,7 +309,10 @@ fun InsufficientScreen() {
                                     couponApplied = band == BandType.COUPON,
                                     onSelect = { selected = it },
                                     onBadgePlaced = { amount, r -> badgeBounds[amount] = r },
-                                    flyingAmount = if (flight != null) selected else null
+                                    flyingAmount = if (flight != null) selected else null,
+                                    // `.lure` — the badges only catch the light while the
+                                    // current pick earns nothing, which on this table is ₹50.
+                                    sweep = goldCard
                                 )
                             }
                             Box(
@@ -312,22 +334,52 @@ fun InsufficientScreen() {
             }
 
             // ---- pay block: pinned, never scrolls ----
-            Column(Modifier.background(Tokens.Palette.white)) {
-                Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.BottomCenter) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        CongratsCard(
-                            credit = shown,
-                            gold = goldCard,
-                            tilt = tiltCurve(tiltRun.value),
-                            absorb = absorbCurve(absorbRun.value),
-                            onFigurePlaced = { figureAt = it },
-                            // Pulled into the arc below so the arc IS its bottom edge.
-                            modifier = Modifier.graphicsLayer { translationY = 22.dp.toPx() }
+            // The veil rides on the block's own background rather than being a separate layer,
+            // because everything in the block that must stay crisp — card, arc, pay bar — paints
+            // its own white on top of it. What the tint actually shows through is the strip
+            // beside the 268-wide card and the summary row, which is exactly what it is for.
+            val veilAlpha by androidx.compose.animation.core.animateFloatAsState(
+                targetValue = if (expanded || summaryOpen) 1f else 0f,
+                animationSpec = tween(Tokens.Motion.veilFadeMs),
+                label = "veil"
+            )
+            Column(
+                Modifier.drawBehind {
+                    drawRect(Tokens.Palette.white)
+                    if (veilAlpha > 0f) {
+                        drawRect(
+                            if (goldCard) Tokens.BandBrush.veilGold else Tokens.BandBrush.veilGreen,
+                            alpha = veilAlpha
                         )
-                        CardArc(goldCard, Modifier.graphicsLayer { translationY = 22.dp.toPx() })
                     }
                 }
-                Spacer(Modifier.height(22.dp))
+            ) {
+                // Card and arc OVERLAP — they are not stacked. The arc is bottom-aligned inside a
+                // wrap only 2dp taller than the card, so it is painted across the card's bottom
+                // 22dp and becomes its bottom edge. Stacked one under the other (which is what
+                // this was) the arc is white-on-white and invisible, and the card reads as a
+                // floating rounded rectangle with a drop shadow instead of sitting into a sweep.
+                // Clipped, and that is the fix for the smudge under the arc. The card's shadow is
+                // offset 6 down with a 14 blur, so it reaches about 12 below the card's bottom
+                // edge — past the arc, which is only 24 tall and bottom-aligned in this 110 wrap
+                // and so cannot cover its own tail. Clipping the wrap ends the shadow exactly
+                // where the arc's curve does.
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .height(Tokens.Dimens.cardWrapHeight)
+                        .clipToBounds(),
+                    contentAlignment = Alignment.TopCenter
+                ) {
+                    CongratsCard(
+                        credit = shown,
+                        gold = goldCard,
+                        tilt = tiltCurve(tiltRun.value),
+                        absorb = absorbCurve(absorbRun.value),
+                        onFigurePlaced = { figureAt = it }
+                    )
+                    CardArc(goldCard, Modifier.align(Alignment.BottomCenter))
+                }
                 PaymentSummaryRow(
                     amount = selected,
                     gst = gst,
@@ -344,6 +396,15 @@ fun InsufficientScreen() {
                 PayBar(total = selected + gst, method = "PhonePe", onPay = {})
             }
         }
+
+        // The close button lives at ROOT, not in the nav, which is the only way it can stay sharp
+        // while the bar behind it is blurred — anything inside the nav row is blurred with it.
+        // 42dp, 24 in from the right edge, centred on the nav row (Figma 5227:27602).
+        SummaryClose(
+            visible = summaryOpen,
+            onClick = { summaryOpen = false },
+            modifier = Modifier.align(Alignment.TopEnd).padding(end = 24.dp, top = 11.dp)
+        )
 
         // Drawn LAST and at root level so it passes over the receipt card and the pay block
         // instead of being clipped by either on the way down.
@@ -364,14 +425,35 @@ fun InsufficientScreen() {
     }
 }
 
+/**
+ * The nav bar. [blur] is applied to its CONTENTS but not to its white ground or its rule, so the
+ * bar keeps its edge while the title behind the close button goes soft — the prototype does the
+ * same thing by putting `filter` on `.topnav` and leaving the close button a sibling of it.
+ */
 @Composable
-private fun TopNav() {
+private fun TopNav(blur: Dp = 0.dp, walletVisible: Boolean = true) {
+    val walletAlpha by androidx.compose.animation.core.animateFloatAsState(
+        targetValue = if (walletVisible) 1f else 0f,
+        animationSpec = tween(200),
+        label = "walletPill"
+    )
     Row(
         Modifier
             .fillMaxWidth()
             .background(Tokens.Palette.white)
+            // The 1dp Gray/300 rule under the nav. It is the only thing separating the bar from
+            // the sheet — both are white — so without it the title floats on the banner.
+            .drawBehind {
+                drawLine(
+                    color = Tokens.Palette.gray300,
+                    start = Offset(0f, size.height),
+                    end = Offset(size.width, size.height),
+                    strokeWidth = 1.dp.toPx()
+                )
+            }
             .padding(horizontal = 16.dp, vertical = 8.dp)
-            .height(48.dp),
+            .height(48.dp)
+            .blur(blur),
         verticalAlignment = Alignment.CenterVertically
     ) {
         // Back arrow and title are ONE control — the whole "← Add Money" group is the back
@@ -394,6 +476,7 @@ private fun TopNav() {
         }
         Row(
             Modifier
+                .graphicsLayer { alpha = walletAlpha }
                 .height(28.dp)
                 .clip(RoundedCornerShape(20.dp))
                 .background(Tokens.Palette.gray100)
@@ -404,6 +487,37 @@ private fun TopNav() {
             WalletGlyph(Tokens.Palette.gray600, Modifier.size(20.dp))
             Text("₹0", style = Tokens.Type.bodyXs, fontWeight = FontWeight.SemiBold, color = Tokens.Palette.gray600)
         }
+    }
+}
+
+/**
+ * The button that shuts the open summary. It scales up from 88% as it fades in, which is what
+ * makes it read as having ARRIVED in the wallet pill's place rather than the pill having changed
+ * into it.
+ */
+@Composable
+private fun SummaryClose(visible: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    val t by androidx.compose.animation.core.animateFloatAsState(
+        targetValue = if (visible) 1f else 0f,
+        animationSpec = tween(if (visible) 280 else 200, easing = Tokens.Motion.easeOut),
+        label = "sumClose"
+    )
+    if (t <= 0f) return
+    Box(
+        modifier
+            .graphicsLayer {
+                alpha = t
+                val s = 0.88f + 0.12f * t
+                scaleX = s; scaleY = s
+            }
+            .size(42.dp)
+            .clip(CircleShape)
+            .background(Tokens.Palette.white)
+            .border(1.dp, Tokens.Palette.gray300, CircleShape)
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        CloseGlyph(Tokens.Palette.gray700, Modifier.size(16.dp))
     }
 }
 
@@ -422,7 +536,8 @@ private fun TileBlock(
     couponApplied: Boolean,
     onSelect: (Int) -> Unit,
     onBadgePlaced: (Int, Rect) -> Unit,
-    flyingAmount: Int?
+    flyingAmount: Int?,
+    sweep: Boolean
 ) {
     // The full grid is laid out the whole time the row is any way open, so nothing re-flows
     // mid-animation; `revealHeight` is the window onto it. Only once it is fully shut does it
@@ -437,7 +552,7 @@ private fun TileBlock(
     }
 
     Column(Modifier.height(revealHeight).clipToBounds()) {
-        shown.chunked(3).forEach { row ->
+        shown.chunked(3).forEachIndexed { rowIndex, row ->
             Row(
                 // Pinned to 96 so row 1 lands pixel-identical whether there is one row or four,
                 // and every row below is a clean +96 on the card, the notch and the button.
@@ -447,7 +562,7 @@ private fun TileBlock(
                 horizontalArrangement = Arrangement.spacedBy(Tokens.Dimens.tileGap),
                 verticalAlignment = Alignment.Top
             ) {
-                row.forEach { sku ->
+                row.forEachIndexed { col, sku ->
                     AmountTile(
                         amount = sku.amount,
                         // Under an applied coupon the badge must show what the wallet is
@@ -457,6 +572,15 @@ private fun TileBlock(
                         onClick = { onSelect(sku.amount) },
                         onBadgePlaced = { onBadgePlaced(sku.amount, it) },
                         badgeHidden = sku.amount == flyingAmount,
+                        // One hero tile carries the coin shower, and it is a fixed amount, not
+                        // "the biggest one showing" — the prototype keeps the coins on ₹250 even
+                        // once the sheet is open and ₹5000 is on screen.
+                        coins = sku.amount == Pricing.COIN_SKU,
+                        sweep = sweep,
+                        // 380ms a tile, the prototype's own `sweepDelay(i)`, counted across the
+                        // whole grid rather than per row so opening the sheet does not put three
+                        // rows of badges in lockstep.
+                        sweepDelayMs = (rowIndex * 3 + col) * 380,
                         // Tile + badge is ~99 tall against a 96 slot, and the badge's last 3dp
                         // is exactly what the negative overlap is meant to eat. Without
                         // unbounded height the row clamps the column and squashes the badge
@@ -474,52 +598,164 @@ private fun TileBlock(
 }
 
 /**
- * The expanded summary. It itemises the coupon SEPARATELY from the bonus — folding the two
- * together is the bug this screen was rebuilt to avoid.
+ * The expanded summary — Figma "Payment summary / State=Open" (`4815:2493`).
+ *
+ * WHAT YOU GET LEADS, WHAT YOU PAY FOLLOWS. That order is the design's, and it is the whole
+ * argument of the sheet: the outlined box states the wallet credit, the grey panel under it shows
+ * where that figure came from, and only then does the GST calculation appear. Flipped — GST
+ * first — the sheet reads as an invoice and the bonus looks like a footnote.
+ *
+ * Two structural details that look like mistakes:
+ *
+ *  - The grey panel is pulled UP 12 under the outlined box, and its top padding is 24 to
+ *    compensate. That is what makes the box look seated into the panel rather than stacked on it;
+ *    the box is z-above so its border stays unbroken across the seam.
+ *  - The panel is dropped entirely when the amount earns nothing, and so is the GST calc block
+ *    when there is no GST. An empty "+₹0" line is worse than no line.
+ *
+ * The coupon is itemised SEPARATELY from the bonus — folding the two together is the bug this
+ * screen was rebuilt to avoid.
  */
 @Composable
 private fun SummaryDetail(visible: Boolean, amount: Int, bonus: Int, coupon: Int, gst: Int) {
-    AnimatedContent(
-        targetState = visible,
-        transitionSpec = {
-            fadeIn(tween(Tokens.Motion.fadeMs)) togetherWith fadeOut(tween(Tokens.Motion.fadeMs))
-        },
-        label = "summary"
-    ) { open ->
-        if (!open) {
-            Spacer(Modifier.height(0.dp))
-        } else {
-            Column(
-                Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp)
-                    .padding(bottom = 12.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                SummaryLine("Recharge amount", "₹$amount")
-                if (bonus > 0) SummaryLine("Bonus credit", "+₹$bonus")
-                if (coupon > 0) SummaryLine("ASTRO 50 coupon", "+₹$coupon")
-                SummaryLine("GST (18%)", "₹$gst")
-                SummaryLine("Wallet credit", "₹${amount + bonus + coupon}", strong = true)
+    val total = amount + bonus + coupon
+    val payable = amount + gst
+
+    // grid-template-rows 0fr -> 1fr over 400ms on the house curve, with the contents fading in
+    // 100ms behind the height. The delay matters: fading in on the same frame as the open makes
+    // the text look like it is being stretched rather than revealed.
+    AnimatedVisibility(
+        visible = visible,
+        enter = expandVertically(tween(Tokens.Motion.summaryOpenMs, easing = Tokens.Motion.easeOut)) +
+            fadeIn(tween(Tokens.Motion.fadeMs, delayMillis = 100)),
+        exit = shrinkVertically(tween(Tokens.Motion.summaryOpenMs, easing = Tokens.Motion.easeOut)) +
+            fadeOut(tween(200))
+    ) {
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .background(Tokens.Palette.white)
+                .padding(horizontal = 16.dp)
+                .padding(bottom = 6.dp),
+            verticalArrangement = Arrangement.spacedBy(20.dp)
+        ) {
+            Column {
+                // Outlined in Success/700 only while there is something to celebrate; a plain
+                // top-up gets the grey version, because a green box round "₹50" is a promise of
+                // a bonus that is not there.
+                val earned = bonus + coupon > 0
+                Row(
+                    Modifier
+                        .zIndex(1f)
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(Tokens.Palette.white)
+                        .border(
+                            1.dp,
+                            if (earned) Tokens.Palette.success700 else Tokens.Palette.gray300,
+                            RoundedCornerShape(12.dp)
+                        )
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    val ink = if (earned) Tokens.Palette.success700 else Tokens.Palette.gray600
+                    Text(
+                        "To be added in your wallet",
+                        style = Tokens.Type.bodyXs, fontWeight = FontWeight.SemiBold, color = ink
+                    )
+                    Text(
+                        "₹$total",
+                        style = Tokens.Type.bodySm, fontWeight = FontWeight.Bold, color = ink
+                    )
+                }
+                if (earned) {
+                    Column(
+                        Modifier
+                            .fillMaxWidth()
+                            .graphicsLayer { translationY = -12.dp.toPx() }
+                            .clip(RoundedCornerShape(bottomStart = 12.dp, bottomEnd = 12.dp))
+                            .background(Tokens.Palette.gray100)
+                            .padding(start = 12.dp, end = 12.dp, top = 24.dp, bottom = 12.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        SummaryLine("Recharge Added", "₹$amount", valueInk = Tokens.Palette.gray800)
+                        if (bonus > 0) SummaryLine(
+                            "Extra Bonus", "+₹$bonus",
+                            labelInk = Tokens.Palette.success700, valueInk = Tokens.Palette.success700
+                        )
+                        if (coupon > 0) SummaryLine(
+                            "Coupon Code Applied", "+₹$coupon",
+                            labelInk = Tokens.Palette.success700, valueInk = Tokens.Palette.success700
+                        )
+                        DashRule(Tokens.Palette.gray300)
+                        SummaryLine(
+                            "Total", "₹$total",
+                            labelInk = Tokens.Palette.gray600, valueInk = Tokens.Palette.gray700
+                        )
+                    }
+                }
+            }
+
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                DashRule(Tokens.Palette.gray200)
+                if (gst > 0) {
+                    Column(
+                        Modifier.padding(horizontal = 12.dp),
+                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                    ) {
+                        SummaryLine("Recharge amount", "₹$amount", valueInk = Tokens.Palette.gray700)
+                        SummaryLine("GST (18%)", "₹$gst", valueInk = Tokens.Palette.gray800)
+                    }
+                    DashRule(Tokens.Palette.gray200)
+                }
+                Row(
+                    Modifier.fillMaxWidth().padding(horizontal = 12.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text("Total payable", style = Tokens.Type.bodySm, fontWeight = FontWeight.SemiBold, color = Tokens.Palette.gray800)
+                    Text("₹$payable", style = Tokens.Type.bodySm, fontWeight = FontWeight.SemiBold, color = Tokens.Palette.gray800)
+                }
+                DashRule(Tokens.Palette.gray200)
             }
         }
     }
 }
 
+/**
+ * One summary row. The label is Body X Small and the value Body Small — the value is a size up,
+ * which is what lets the eye run down the right-hand column without reading the labels.
+ */
 @Composable
-private fun SummaryLine(label: String, value: String, strong: Boolean = false) {
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-        Text(
-            label,
-            style = Tokens.Type.bodyXs,
-            color = if (strong) Tokens.Palette.gray800 else Tokens.Palette.gray500,
-            fontWeight = if (strong) FontWeight.SemiBold else FontWeight.Normal
-        )
-        Text(
-            value,
-            style = Tokens.Type.bodyXs,
-            color = if (strong) Tokens.Palette.gray800 else Tokens.Palette.gray600,
-            fontWeight = if (strong) FontWeight.SemiBold else FontWeight.Medium
-        )
+private fun SummaryLine(
+    label: String,
+    value: String,
+    labelInk: androidx.compose.ui.graphics.Color = Tokens.Palette.gray500,
+    valueInk: androidx.compose.ui.graphics.Color = Tokens.Palette.gray700
+) {
+    Row(
+        Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(label, style = Tokens.Type.bodyXs, color = labelInk)
+        Text(value, style = Tokens.Type.bodySm, color = valueInk)
+    }
+}
+
+/**
+ * `repeating-linear-gradient(90deg, c 0 2px, transparent 2px 4px)` — a 2-on 2-off dotted rule.
+ * A solid hairline here reads as a table border and boxes the numbers in; the dotted one reads
+ * as a receipt, which is what the whole card is pretending to be.
+ */
+@Composable
+private fun DashRule(color: androidx.compose.ui.graphics.Color) {
+    Canvas(Modifier.fillMaxWidth().height(1.dp)) {
+        val step = 4.dp.toPx()
+        var x = 0f
+        while (x < size.width) {
+            drawRect(color, topLeft = Offset(x, 0f), size = Size(2.dp.toPx(), size.height))
+            x += step
+        }
     }
 }
