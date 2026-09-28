@@ -320,6 +320,21 @@ object Tokens {
             Color(0x00FFFFFF)
         )
 
+        /**
+         * The fade that pulls the sparkle field away from the band's copy — the CSS
+         * `mask-image:linear-gradient(to left,#000 0%,rgba(0,0,0,.5) 26%,rgba(0,0,0,.12) 52%,
+         * transparent 72%)`, read right-to-left and written here left-to-right.
+         *
+         * Only the alpha channel matters; it is multiplied into the stars with `DstIn`.
+         */
+        val starsMask = h(
+            0f to Color(0x00000000),
+            0.28f to Color(0x00000000),
+            0.48f to Color(0xFF000000).copy(alpha = 0.12f),
+            0.74f to Color(0xFF000000).copy(alpha = 0.5f),
+            1f to Color(0xFF000000)
+        )
+
         /** The same bar on the coupon band, where the CSS takes it up to 55% — a wider, darker
          *  surface needs more light to show the same amount of it. */
         val bandSweepStops = listOf(

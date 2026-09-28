@@ -25,6 +25,8 @@ import androidx.compose.ui.composed
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.AnnotatedString
@@ -86,6 +88,13 @@ fun AlertBand(
             .background(brush)
             .bandSweep(enabled = type == BandType.COUPON)
     ) {
+        // Behind the copy, and before it in the Box so it stays there — the prototype does the
+        // same with `z-index:0` on the stars and `z-index:1` on `.bandin`.
+        when (type) {
+            BandType.OFFER -> BandStars(0.26f, Modifier.align(Alignment.TopEnd))
+            BandType.COUPON -> BandStars(0.30f, Modifier.align(Alignment.TopEnd))
+            else -> Unit
+        }
         Row(
             Modifier.padding(
                 start = 16.dp, end = 16.dp, top = 12.dp,
@@ -119,6 +128,43 @@ fun AlertBand(
         }
     }
 }
+
+/**
+ * The sparkle field on the two green bands — `stars.svg`, shipped as-is: 45 four-pointed stars
+ * on a 15 x 3 grid, already carrying their own per-star and per-row alphas so the field thins
+ * out downwards and to the left before any masking.
+ *
+ * It is NOT full-bleed. 236 of the band's ~328dp, pinned to the TOP RIGHT, and masked so it dies
+ * away before it reaches the copy — stretched across the whole band it is the version she called
+ * "horrible", and any star behind a word makes the word harder to read for nothing.
+ *
+ * [opacity] is per band and is spec, not taste: Figma names Offer 26% and Coupon 30%. The stars
+ * are solid white on green, so opacity is a straight visibility dial — UP is brighter. There is
+ * no value that is both fainter and more visible, and the Coupon band is the lighter green, which
+ * is why it needs the higher number to land at the same apparent strength.
+ */
+@Composable
+private fun BandStars(opacity: Float, modifier: Modifier = Modifier) {
+    Image(
+        painter = painterResource(R.drawable.ic_band_stars),
+        contentDescription = null,
+        alpha = opacity,
+        modifier = modifier
+            .width(STARS_WIDTH)
+            .height(STARS_HEIGHT)
+            // The mask has to composite against the stars alone, so the layer is rendered off
+            // screen first. Drawn straight into the band, DstIn would eat the band with them.
+            .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
+            .drawWithContent {
+                drawContent()
+                drawRect(brush = Tokens.BandBrush.starsMask, blendMode = BlendMode.DstIn)
+            }
+    )
+}
+
+/** `width:236px;height:44px` — 236 of the band's width, not full-bleed. */
+private val STARS_WIDTH = 236.dp
+private val STARS_HEIGHT = 44.dp
 
 /**
  * The coupon band's light sweep — the prototype's `.sweep`, which until now had no Compose
