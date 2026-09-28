@@ -21,7 +21,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.composed
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.res.painterResource
@@ -82,6 +84,7 @@ fun AlertBand(
             // against the app's grey chrome and come out muddy instead of tinting white.
             .background(Tokens.Palette.white)
             .background(brush)
+            .bandSweep(enabled = type == BandType.COUPON)
     ) {
         Row(
             Modifier.padding(
@@ -116,6 +119,53 @@ fun AlertBand(
         }
     }
 }
+
+/**
+ * The coupon band's light sweep — the prototype's `.sweep`, which until now had no Compose
+ * equivalent at all. On the ASTRO50 band it is the only thing moving apart from the seal, and
+ * the seal holds dead still for two seconds and then snaps: with nothing else running, that snap
+ * is all you see, and what it reads as is a blink rather than a band that is alive.
+ *
+ * Coupon ONLY, which is the prototype's own rule (`.am .coupon .sweep`) — the Offer band has a
+ * running clock in it and deliberately goes without, because a light crossing a countdown reads
+ * as the countdown flickering.
+ *
+ * Geometry off the CSS: a bar 40% of the band wide starting at -60%, travelling 190% of the
+ * band's width, over the top 62dp only — below that the band is behind the receipt card and a
+ * sweep down there is light with nothing to light.
+ *
+ * Timing: 2.8s, still for the first 40%, crossing over the next 40%, still again to the end.
+ * The crossing is LINEAR, and that is a deliberate departure from the CSS's `ease-in-out`. The
+ * run is 1.9x the width you can actually see, so under ease-in-out the entire visible crossing
+ * falls inside the fastest part of the curve — about 0.4s of a 2.8s cycle — and the sweep
+ * flashes instead of travelling. Constant speed puts 0.6s of visible movement on screen and is
+ * what the badge sweep next to it already does.
+ */
+private fun Modifier.bandSweep(enabled: Boolean): Modifier = composed {
+    if (!enabled) return@composed this
+    val clock = rememberInfiniteTransition(label = "bandSweep")
+    val t by clock.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            tween(Tokens.Motion.bandSweepMs, easing = androidx.compose.animation.core.LinearEasing)
+        ),
+        label = "bandSweepClock"
+    )
+    drawWithContent {
+        drawContent()
+        val run = (((t - 0.40f) / 0.40f)).coerceIn(0f, 1f)
+        drawSweepBar(
+            left = size.width * (-0.60f + 1.90f * run),
+            width = size.width * 0.40f,
+            stops = Tokens.BandBrush.bandSweepStops,
+            height = SWEEP_VISIBLE_HEIGHT.toPx()
+        )
+    }
+}
+
+/** `.am .coupon .sweep{height:62px}` — the part of the band the card does not cover. */
+private val SWEEP_VISIBLE_HEIGHT = 62.dp
 
 /**
  * White pill on the deepest green in the set — the strongest contrast the band can offer, which

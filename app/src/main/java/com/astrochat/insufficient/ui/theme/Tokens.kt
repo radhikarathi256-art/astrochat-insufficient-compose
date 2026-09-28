@@ -199,6 +199,8 @@ object Tokens {
         const val popupBadgeWiggleMs = 1200
         /** `chipSweep` — one pass of light across a bonus badge, then a gap before the next. */
         const val chipSweepMs = 3200
+        /** `sweep` — the same idea on the coupon band, slower and over a longer run. */
+        const val bandSweepMs = 2800
         /** `.ps-details` grid-rows 0fr -> 1fr, and the veil blur that rides with it. */
         const val summaryOpenMs = 400
         const val veilFadeMs = 300
@@ -305,14 +307,25 @@ object Tokens {
         )
 
         /**
-         * The travelling highlight on a bonus badge — `chipSweep`. White at 40% in the middle of
-         * a 38%-wide band, transparent at both ends, so it reads as light crossing the pill
-         * rather than a white shape sliding over it.
+         * The travelling highlight on a bonus badge — `chipSweep`. White at 40% in the middle,
+         * transparent at both ends, so it reads as light crossing the pill rather than a white
+         * shape sliding over it.
+         *
+         * Stops only, not a Brush: the sweep is a slanted bar, so its gradient has to be built
+         * against the bar's own coordinates at draw time. See `drawSweepBar`.
          */
-        val chipSweep = h(
-            0f to Color(0x00FFFFFF),
-            0.5f to Color(0xFFFFFFFF).copy(alpha = 0.4f),
-            1f to Color(0x00FFFFFF)
+        val chipSweepStops = listOf(
+            Color(0x00FFFFFF),
+            Color(0xFFFFFFFF).copy(alpha = 0.4f),
+            Color(0x00FFFFFF)
+        )
+
+        /** The same bar on the coupon band, where the CSS takes it up to 55% — a wider, darker
+         *  surface needs more light to show the same amount of it. */
+        val bandSweepStops = listOf(
+            Color(0x00FFFFFF),
+            Color(0xFFFFFFFF).copy(alpha = 0.55f),
+            Color(0x00FFFFFF)
         )
 
         /**

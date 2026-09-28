@@ -1,5 +1,6 @@
 package com.astrochat.insufficient.ui.components
 
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
@@ -25,6 +26,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -49,6 +51,7 @@ import com.airbnb.lottie.compose.LottieCompositionSpec
 import com.airbnb.lottie.compose.LottieConstants
 import com.airbnb.lottie.compose.rememberLottieComposition
 import com.astrochat.insufficient.ui.theme.Tokens
+import kotlinx.coroutines.launch
 
 /**
  * One amount in the SKU row — Figma component `4803:2363` (89 x 67, r14), plus the bonus badge
@@ -204,19 +207,22 @@ private fun CoinShower(modifier: Modifier = Modifier) {
  */
 @Composable
 private fun SelectedCorner(modifier: Modifier = Modifier) {
-    // Both start at 0 on first composition, so the wedge slides in from the corner and the tick
+    // Both run from 0 on first composition, so the wedge slides in from the corner and the tick
     // writes itself on 80ms behind it. Recomposing a NEW corner on each selection is what makes
     // that replay — there is no visible/gone state to drive.
-    val wedgeIn by animateFloatAsState(
-        targetValue = 1f,
-        animationSpec = tween(280, easing = Tokens.Motion.spring),
-        label = "wedge"
-    )
-    val progress by animateFloatAsState(
-        targetValue = 1f,
-        animationSpec = tween(350, delayMillis = 80, easing = Tokens.Motion.spring),
-        label = "tick"
-    )
+    //
+    // Animatable, NOT animateFloatAsState. `animateFloatAsState(1f)` only animates when the
+    // TARGET changes; on first composition it initialises AT the target, so both of these were
+    // 1f on the frame the corner appeared and the whole entrance was silently skipped. The
+    // selection just snapped on. That is the bug this comment used to describe as working.
+    val wedge = remember { Animatable(0f) }
+    val tick = remember { Animatable(0f) }
+    LaunchedEffect(Unit) {
+        launch { wedge.animateTo(1f, tween(280, easing = Tokens.Motion.spring)) }
+        tick.animateTo(1f, tween(350, delayMillis = 80, easing = Tokens.Motion.spring))
+    }
+    val wedgeIn = wedge.value
+    val progress = tick.value
     Box(
         modifier
             .fillMaxWidth(WEDGE_WIDTH_FRACTION)
@@ -306,10 +312,10 @@ fun BonusBadge(
                 val phase = (sweepT + sweepDelayMs / Tokens.Motion.chipSweepMs.toFloat()) % 1f
                 val run = (phase / 0.42f).coerceAtMost(1f)
                 val band = size.width * 0.38f
-                drawRect(
-                    brush = Tokens.BandBrush.chipSweep,
-                    topLeft = Offset(band * (-1.2f + 4.2f * run), 0f),
-                    size = androidx.compose.ui.geometry.Size(band, size.height)
+                drawSweepBar(
+                    left = band * (-1.2f + 4.2f * run),
+                    width = band,
+                    stops = Tokens.BandBrush.chipSweepStops
                 )
             }
             .padding(horizontal = 8.dp, vertical = 6.dp),
