@@ -262,14 +262,6 @@ object Tokens {
             0.663f to Color(0xFF027A48), 1f to Color(0xFF039855)
         )
 
-        /**
-         * A single falling coin on the hero tile. Lit from the top so the spin reads — a flat
-         * gold fill squashed by the rotation looks like a shrinking pill, not a turning disc.
-         */
-        val coin = Brush.verticalGradient(
-            0f to Color(0xFFFBE3A4), 0.45f to Color(0xFFE9B949), 1f to Color(0xFFC08A22)
-        )
-
         /** Type=Missing out — amber, shown when a better tier is one tap away. */
         val missingOut = h(
             0f to Color(0xFFFEF5DE).copy(alpha = 0.6f),

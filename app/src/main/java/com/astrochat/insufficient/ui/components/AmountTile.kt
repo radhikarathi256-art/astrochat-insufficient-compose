@@ -38,11 +38,16 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.airbnb.lottie.compose.LottieAnimation
+import com.airbnb.lottie.compose.LottieCompositionSpec
+import com.airbnb.lottie.compose.LottieConstants
+import com.airbnb.lottie.compose.rememberLottieComposition
 import com.astrochat.insufficient.ui.theme.Tokens
 
 /**
@@ -156,66 +161,31 @@ fun AmountTile(
 }
 
 /**
- * Coins raining down the hero tile.
+ * Coins raining down the hero tile — the shipped `AstroChat falling coins` dotLottie, the same
+ * file and the same URL the web prototype plays (`COIN_LOTTIE` in its template).
  *
- * The prototype plays a dotLottie here, but its own CSS fallback (`@keyframes coinFall`) is the
- * spec that is actually readable: five coins on a 3.6s loop, staggered so no two land together,
- * falling from 22 above the tile to 82 below it while they spin 220°. They are parked at the far
- * left and far right because the middle of the tile belongs to the amount — the prototype even
- * masks the middle 24–76% out rather than trusting the placement.
+ * This used to be five ovals drawn on a Canvas, reverse-engineered from the prototype's CSS
+ * *fallback* rather than from the animation itself. The real one is six coins at 192x154 over a
+ * 4s loop at 60fps, and each coin is a precomp with a face, a round side and an edge — a spinning
+ * disc with a rim, not a squashed ellipse. Nothing hand-drawn was going to converge on that.
  *
- * Drawn as one Canvas off a single clock rather than five animated composables: five infinite
- * transitions on a tile that is rebuilt on every tap is how this ends up dropping frames.
+ * Bundled as an asset rather than streamed from lottie.host: the tile is what sells the bonus,
+ * and on a bad connection a network fetch leaves it empty. There are no image assets inside, only
+ * shapes, so the 4.9KB file is the whole animation.
+ *
+ * Crop, not Fit — `layout:{fit:'cover'}` in the prototype. The tile is 89x67 (1.33) against the
+ * animation's 1.25, so Fit would letterbox it and the coins would fall short of the edges.
  */
 @Composable
 private fun CoinShower(modifier: Modifier = Modifier) {
-    val t = rememberInfiniteTransition(label = "coinfall")
-    val clock by t.animateFloat(
-        initialValue = 0f,
-        targetValue = COIN_CYCLE_MS,
-        animationSpec = infiniteRepeatable(
-            tween(COIN_CYCLE_MS.toInt(), easing = androidx.compose.animation.core.LinearEasing)
-        ),
-        label = "clock"
+    val composition by rememberLottieComposition(LottieCompositionSpec.Asset("coin.lottie"))
+    LottieAnimation(
+        composition = composition,
+        iterations = LottieConstants.IterateForever,
+        contentScale = ContentScale.Crop,
+        modifier = modifier.clip(RoundedCornerShape(Tokens.Dimens.tileRadius))
     )
-    androidx.compose.foundation.Canvas(modifier) {
-        COINS.forEach { (leftFraction, diameterDp, delayMs) ->
-            // Each coin runs the same 0..1 cycle, just entered at a different point.
-            val p = (((clock - delayMs) % COIN_CYCLE_MS) + COIN_CYCLE_MS) % COIN_CYCLE_MS / COIN_CYCLE_MS
-            val d = diameterDp.dp.toPx()
-            val cx = leftFraction * size.width + d / 2f
-            val cy = (-22f + (82f + 22f) * p).dp.toPx() + d / 2f
-            // 0 -> .95 by 12%, held to 80%, then out. The fade-in is fast because a coin that
-            // materialises slowly reads as a glow rather than as something falling.
-            val alpha = when {
-                p < 0.12f -> p / 0.12f * 0.95f
-                p < 0.80f -> 0.95f
-                else -> (1f - p) / 0.20f * 0.95f
-            }
-            if (alpha <= 0f) return@forEach
-            // The spin is what makes it a coin and not a dot: squashing the width by cos of the
-            // rotation turns the disc edge-on twice a turn.
-            val spin = Math.toRadians((220f * p).toDouble())
-            val squash = kotlin.math.abs(kotlin.math.cos(spin)).toFloat().coerceAtLeast(0.14f)
-            drawOval(
-                brush = Tokens.BandBrush.coin,
-                topLeft = Offset(cx - d * squash / 2f, cy - d / 2f),
-                size = androidx.compose.ui.geometry.Size(d * squash, d),
-                alpha = alpha
-            )
-        }
-    }
 }
-
-/** left fraction of the tile, diameter in dp, start delay in ms — the prototype's own five. */
-private val COINS = listOf(
-    Triple(0.02f, 15f, 0f),
-    Triple(0.81f, 15f, 900f),
-    Triple(0.04f, 13f, 1800f),
-    Triple(0.83f, 13f, 2700f),
-    Triple(0.01f, 14f, 3300f)
-)
-private const val COIN_CYCLE_MS = 3600f
 
 /**
  * The orange corner wedge with its tick — `tile-selected.svg`.
