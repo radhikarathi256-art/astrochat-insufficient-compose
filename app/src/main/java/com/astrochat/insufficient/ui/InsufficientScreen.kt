@@ -214,6 +214,23 @@ fun InsufficientScreen() {
     // coupon, say — still has to keep the card honest.
     LaunchedEffect(credit) { if (flight == null) shown = credit }
 
+    // ---- where the page sits when the SKU grid opens ----
+    // The extra rows grow the card DOWNWARDS, behind the pinned pay block, so on open the page has
+    // to come up to meet them or "See Less Options" is off-screen. The prototype lands at the
+    // BOTTOM of the scroller (setOpen -> scrollTop = scrollHeight - clientHeight) — her call — and
+    // it does it as a plain assignment after a 400ms wait, not a smooth scroll. Both details
+    // matter here too: `maxValue` is only final once the 360ms height animation has settled, and a
+    // second, slower animation riding on top of the expand reads as drift. So: wait, then snap.
+    val pageScroll = rememberScrollState()
+    LaunchedEffect(expanded) {
+        if (expanded) {
+            delay(400)
+            pageScroll.scrollTo(pageScroll.maxValue)
+        } else {
+            pageScroll.animateScrollTo(0)
+        }
+    }
+
     Box(
         Modifier
             .fillMaxSize()
@@ -232,7 +249,7 @@ fun InsufficientScreen() {
                 Modifier
                     .weight(1f)
                     .blur(if (summaryOpen) 4.dp else 0.dp)
-                    .verticalScroll(rememberScrollState())
+                    .verticalScroll(pageScroll)
             ) {
                 Spacer(Modifier.height(16.dp))
 
@@ -330,14 +347,22 @@ fun InsufficientScreen() {
                     }
                 }
 
-                Spacer(Modifier.height(24.dp))
+                // This tail IS the prototype's SAFE_ABOVE_CARD. Scrolled to the bottom with the
+                // grid open, it is what holds the dashed card's bottom edge 80 clear of the
+                // congrats card instead of letting it come to rest almost touching. 80 is her
+                // number; 52 is what the spacer has to be to produce it, because the receipt
+                // card is lifted by `bandHiddenBehindCard` and so already ends 28 short of the
+                // scroller. Collapsed, nothing overflows and this is never seen.
+                Spacer(Modifier.height(52.dp))
             }
 
             // ---- pay block: pinned, never scrolls ----
             // The veil rides on the block's own background rather than being a separate layer,
-            // because everything in the block that must stay crisp — card, arc, pay bar — paints
-            // its own white on top of it. What the tint actually shows through is the strip
-            // beside the 268-wide card and the summary row, which is exactly what it is for.
+            // because everything in the block that must stay crisp — card, arc, summary, pay bar —
+            // paints its own white on top of it. What the tint shows through is only the strip
+            // beside the 268-wide card, which is exactly what it is for. The summary is NOT part
+            // of that strip: the prototype gives it `.am .summary{z-index:2;background:#fff}`, so
+            // it must paint white too or the row reads as tinted mint against Figma's white.
             val veilAlpha by androidx.compose.animation.core.animateFloatAsState(
                 targetValue = if (expanded || summaryOpen) 1f else 0f,
                 animationSpec = tween(Tokens.Motion.veilFadeMs),
@@ -380,19 +405,23 @@ fun InsufficientScreen() {
                     )
                     CardArc(goldCard, Modifier.align(Alignment.BottomCenter))
                 }
-                PaymentSummaryRow(
-                    amount = selected,
-                    gst = gst,
-                    expanded = summaryOpen,
-                    onToggle = { summaryOpen = !summaryOpen }
-                )
-                SummaryDetail(
-                    visible = summaryOpen,
-                    amount = selected,
-                    bonus = Pricing.bonusFor(selected),
-                    coupon = if (band == BandType.COUPON) Pricing.COUPON_FLAT else 0,
-                    gst = gst
-                )
+                // The row AND its breakdown share one white surface, because in the prototype they
+                // are one element (`.summary` wraps `.sumrow` + `.ps-details`).
+                Column(Modifier.background(Tokens.Palette.white)) {
+                    PaymentSummaryRow(
+                        amount = selected,
+                        gst = gst,
+                        expanded = summaryOpen,
+                        onToggle = { summaryOpen = !summaryOpen }
+                    )
+                    SummaryDetail(
+                        visible = summaryOpen,
+                        amount = selected,
+                        bonus = Pricing.bonusFor(selected),
+                        coupon = if (band == BandType.COUPON) Pricing.COUPON_FLAT else 0,
+                        gst = gst
+                    )
+                }
                 PayBar(total = selected + gst, method = "PhonePe", onPay = {})
             }
         }
