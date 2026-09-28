@@ -12,7 +12,6 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -26,6 +25,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
+import androidx.compose.ui.text.PlatformTextStyle
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -275,6 +277,27 @@ private const val WEDGE_HEIGHT_FRACTION = 0.5f
  * badges have made their point, and leaving the light running turns the whole row into a
  * carousel. [sweepDelayMs] staggers it 380ms a tile so the three do not pulse in unison.
  */
+/**
+ * Figma's "Body X Small 12" as an actual 18dp line box.
+ *
+ * `lineHeight = 18.sp` on its own does NOT give you an 18dp tall line here. Compose's default
+ * [LineHeightStyle] trims the leading above the first line and below the last, and in a
+ * single-line Text that is every line — so the extra height is trimmed straight back off and
+ * the row collapses to the font's own 14.5dp. Measured: the badge came out 22.5dp instead of
+ * 26dp. `Trim.None` keeps the box, `Alignment.Center` splits the leading evenly so the glyphs
+ * sit where Figma puts them, and includeFontPadding = false removes Android's legacy extra.
+ */
+private val BadgeTextStyle = TextStyle(
+    fontSize = 12.sp,
+    lineHeight = 18.sp,
+    letterSpacing = 0.sp,
+    platformStyle = PlatformTextStyle(includeFontPadding = false),
+    lineHeightStyle = LineHeightStyle(
+        alignment = LineHeightStyle.Alignment.Center,
+        trim = LineHeightStyle.Trim.None
+    )
+)
+
 @Composable
 fun BonusBadge(
     bonus: Int,
@@ -319,16 +342,22 @@ fun BonusBadge(
                     stops = Tokens.BandBrush.chipSweepStops
                 )
             }
-            .padding(horizontal = 8.dp, vertical = 6.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        // 1.dp is the badge's itemSpacing in Figma (Bonus badge / Style=Green, 4803:2367).
-        // It has to be real spacing — a leading space inside "extra" renders ~3dp here and
-        // gives nothing at all between "+₹" and the figure.
-        horizontalArrangement = Arrangement.spacedBy(1.dp)
+            // Figma's own padding, and the pill stays 26dp tall: 4 + 18 + 4. The card's
+            // spacing below is measured off this height, so keep that sum at 26.
+            .padding(horizontal = 5.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Text("+₹", fontSize = 10.sp, lineHeight = 14.sp, fontWeight = FontWeight.SemiBold, color = Tokens.Palette.white)
-        Text("$bonus", fontSize = 12.sp, lineHeight = 14.sp, fontWeight = FontWeight.ExtraBold, color = Tokens.Palette.white)
-        Text("extra", fontSize = 10.sp, lineHeight = 14.sp, fontWeight = FontWeight.SemiBold, color = Tokens.Palette.white)
+        // All three parts are Figma's "Body X Small 12" — 12sp on an 18sp line box. The badge
+        // does not shrink its own type; the figure is separated by weight alone.
+        Text("+₹", style = BadgeTextStyle, fontWeight = FontWeight.Normal, color = Tokens.Palette.white)
+        Text("$bonus", style = BadgeTextStyle, fontWeight = FontWeight.Bold, color = Tokens.Palette.white)
+        // 1.dp is the badge's whole itemSpacing, and it belongs HERE only: in Figma "+" and
+        // "₹500" sit in a nested 0-gap frame, so the single gap falls before "extra". A
+        // leading space inside the string would render ~3dp instead and is not the same thing.
+        Text(
+            "extra", style = BadgeTextStyle, fontWeight = FontWeight.Normal,
+            color = Tokens.Palette.white, modifier = Modifier.padding(start = 1.dp)
+        )
     }
 }
 
