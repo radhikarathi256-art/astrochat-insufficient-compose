@@ -264,7 +264,7 @@ private const val WEDGE_HEIGHT_FRACTION = 0.5f
 /**
  * Bonus badge — Figma "Bonus badge / Style=Green" (`4803:2372`).
  *
- * The figure is 12sp ExtraBold while "+₹" and "more" stay 10sp/600: the number carries the
+ * The figure is 12sp ExtraBold while "+₹" and "extra" stay 10sp/600: the number carries the
  * hierarchy on its own, and the line height is pinned so the larger inline type cannot grow the
  * badge. The card's whole vertical rhythm below is measured off this badge's height.
  *
@@ -323,14 +323,14 @@ fun BonusBadge(
     ) {
         Text("+₹", fontSize = 10.sp, lineHeight = 14.sp, fontWeight = FontWeight.SemiBold, color = Tokens.Palette.white)
         Text("$bonus", fontSize = 12.sp, lineHeight = 14.sp, fontWeight = FontWeight.ExtraBold, color = Tokens.Palette.white)
-        Text(" more", fontSize = 10.sp, lineHeight = 14.sp, fontWeight = FontWeight.SemiBold, color = Tokens.Palette.white)
+        Text(" extra", fontSize = 10.sp, lineHeight = 14.sp, fontWeight = FontWeight.SemiBold, color = Tokens.Palette.white)
     }
 }
 
 /**
  * The badge in flight — the screen's signature move.
  *
- * Picking an amount lifts its "+₹150 more" pill off the tile, arcs it down and drops it into the
+ * Picking an amount lifts its "+₹150 extra" pill off the tile, arcs it down and drops it into the
  * congratulations card, and the card starts counting the bonus on at the moment it lands. This
  * is what connects the two halves of the screen: without it the card's figure just changes and
  * nothing tells the user that the number came from the tile they tapped.
