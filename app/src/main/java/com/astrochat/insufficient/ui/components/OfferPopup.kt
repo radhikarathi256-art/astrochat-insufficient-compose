@@ -13,16 +13,19 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -33,6 +36,9 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.airbnb.lottie.compose.LottieAnimation
+import com.airbnb.lottie.compose.LottieCompositionSpec
+import com.airbnb.lottie.compose.rememberLottieComposition
 import com.astrochat.insufficient.R
 import com.astrochat.insufficient.ui.theme.Tokens
 import kotlinx.coroutines.delay
@@ -61,7 +67,7 @@ fun OfferPopup(
         modifier = modifier
     ) {
         val scrimInteraction = remember { MutableInteractionSource() }
-        Box(
+        BoxWithConstraints(
             Modifier
                 .fillMaxSize()
                 .background(Tokens.scrim)
@@ -69,6 +75,20 @@ fun OfferPopup(
                 .clickable(interactionSource = scrimInteraction, indication = null, onClick = onDismiss),
             contentAlignment = Alignment.Center
         ) {
+            // Confetti sits ABOVE the scrim and BELOW the card, which in the prototype is done
+            // purely by DOM order (`.confetti{z-index:1}`) and here purely by declaration order.
+            //
+            // It bursts ONCE and stops. The popup has your whole attention the moment it lands,
+            // so a loop would read as decoration rather than as something having just happened —
+            // same reasoning as the badge's single wiggle below.
+            //
+            // 150% of the overlay width and square, centred — the prototype's
+            // `width:150%;aspect-ratio:1;left:50%;top:50%;translate(-50%,-50%)`. It is MEANT to
+            // overflow: the burst throws pieces past all four edges, and a confetti layer boxed
+            // to the screen visibly stops at the sides. `requiredSize` is what lets it ignore the
+            // parent's constraints; plain `size` would be clamped back to the screen.
+            Confetti(Modifier.requiredSize(maxWidth * 1.5f))
+
             AnimatedVisibility(
                 visible = visible,
                 enter = scaleIn(tween(Tokens.Motion.popupInMs, easing = Tokens.Motion.spring), initialScale = 0.86f) +
@@ -121,6 +141,18 @@ fun OfferPopup(
             }
         }
     }
+}
+
+/**
+ * The burst behind the popup — the shipped `confetti.lottie`, the same animation the web
+ * prototype plays (`LOTTIE_CONFETTI`). 400x400, 30fps, 4.03s, one pass.
+ *
+ * Square native, so a square box neither crops nor letterboxes it and the default Fit is right.
+ */
+@Composable
+private fun Confetti(modifier: Modifier = Modifier) {
+    val composition by rememberLottieComposition(LottieCompositionSpec.Asset("confetti.lottie"))
+    LottieAnimation(composition = composition, iterations = 1, modifier = modifier)
 }
 
 /**
